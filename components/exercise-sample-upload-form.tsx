@@ -9,7 +9,7 @@
  */
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import { uploadFileResumable } from "@/lib/supabase/resumable-upload";
 
@@ -87,6 +87,13 @@ function parseYouTubeId(url: string): string | null {
     return null;
   }
   return null;
+}
+
+declare global {
+  interface Window {
+    YT?: any;
+    onYouTubeIframeAPIReady?: () => void;
+  }
 }
 
 function toEmbedUrl(url: string): string | null {
@@ -168,6 +175,10 @@ export default function ExerciseSampleUploadForm({
   });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
+  const youtubePlayerRef = useRef<any>(null);
+  const [youtubeReady, setYoutubeReady] = useState(false);
+  const [youtubePlaying, setYoutubePlaying] = useState(false);
   const linkedUrls = useMemo(() => (linkInput.trim() ? [linkInput.trim()] : []), [linkInput]);
   const hasValidLinkUrls = useMemo(() => {
     if (linkedUrls.length !== 1) return false;
@@ -284,6 +295,10 @@ export default function ExerciseSampleUploadForm({
     setCursor(value);
     if (videoSource === "upload" && videoRef.current) {
       videoRef.current.currentTime = value;
+      return;
+    }
+    if (videoSource === "link" && loadedLinkYouTubeId && youtubePlayerRef.current?.seekTo) {
+      youtubePlayerRef.current.seekTo(value, true);
     }
   }
 
@@ -310,6 +325,8 @@ export default function ExerciseSampleUploadForm({
     setTopPhotoUrl("");
     setMiddlePhotoUrl("");
     setBottomPhotoUrl("");
+    setYoutubeReady(false);
+    setYoutubePlaying(false);
   }
 
   async function captureAndUploadFrame(slot: RepPhotoSlot) {
@@ -477,10 +494,69 @@ export default function ExerciseSampleUploadForm({
 
   const activeVideo = uploadedVideos[selectedVideoIndex];
   const loadedLinkEmbedUrl = useMemo(() => toEmbedUrl(loadedLinkUrl), [loadedLinkUrl]);
+  const loadedLinkYouTubeId = useMemo(() => parseYouTubeId(loadedLinkUrl), [loadedLinkUrl]);
   const selectedExercise = useMemo(
     () => exercises.find((exercise) => exercise.id === selectedExerciseId),
     [exercises, selectedExerciseId]
   );
+
+  useEffect(() => {
+    if (!loadedLinkYouTubeId || videoSource !== "link") return;
+    const start = () => {
+      if (!youtubeContainerRef.current || !window.YT?.Player) return;
+      youtubePlayerRef.current?.destroy?.();
+      const player = new window.YT.Player(youtubeContainerRef.current, {
+        videoId: loadedLinkYouTubeId,
+        playerVars: { rel: 0 },
+        events: {
+          onReady: (event: any) => {
+            const d = Number(event?.target?.getDuration?.() || 0);
+            if (d > 0) setDuration(d);
+            setYoutubeReady(true);
+          },
+          onStateChange: (event: any) => {
+            const state = Number(event?.data);
+            setYoutubePlaying(state === 1 || state === 3);
+          }
+        }
+      });
+      youtubePlayerRef.current = player;
+    };
+
+    if (window.YT?.Player) {
+      start();
+    } else {
+      const priorHandler = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        priorHandler?.();
+        start();
+      };
+      const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+      if (!existing) {
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(script);
+      }
+    }
+
+    return () => {
+      youtubePlayerRef.current?.destroy?.();
+      youtubePlayerRef.current = null;
+      setYoutubeReady(false);
+      setYoutubePlaying(false);
+    };
+  }, [loadedLinkYouTubeId, videoSource]);
+
+  useEffect(() => {
+    if (videoSource !== "link" || !loadedLinkYouTubeId || !youtubeReady || !youtubePlaying) return;
+    const id = window.setInterval(() => {
+      const current = Number(youtubePlayerRef.current?.getCurrentTime?.() || 0);
+      if (Number.isFinite(current)) setCursor(current);
+      const d = Number(youtubePlayerRef.current?.getDuration?.() || 0);
+      if (d > 0) setDuration(d);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [videoSource, loadedLinkYouTubeId, youtubeReady, youtubePlaying]);
 
   const formContent = (
     <>
@@ -658,7 +734,11 @@ export default function ExerciseSampleUploadForm({
       {videoSource === "link" && !!loadedLinkUrl && (
         <div className="md:col-span-2 border rounded p-3 bg-white space-y-2">
           <p className="text-sm font-semibold">Frame Cursor for Top / Middle / Bottom</p>
-          {loadedLinkEmbedUrl ? (
+          {loadedLinkYouTubeId ? (
+            <div className="rounded border overflow-hidden bg-black">
+              <div ref={youtubeContainerRef} className="w-full h-[420px]" />
+            </div>
+          ) : loadedLinkEmbedUrl ? (
             <div className="rounded border overflow-hidden bg-black">
               <iframe
                 src={loadedLinkEmbedUrl}
