@@ -685,7 +685,7 @@ export default function ExerciseSampleUploadForm({
               Load Video Link
             </button>
             {!!loadedLinkUrl && (
-              <p className="text-xs text-green-700">Loaded video is persisted for this exercise.</p>
+              <p className="text-xs text-green-700">Video link loaded. Click Save Sample to persist it to this exercise.</p>
             )}
             <p className="text-xs meta">
               Exact timestamp screenshots are only generated for uploaded video files.

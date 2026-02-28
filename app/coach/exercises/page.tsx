@@ -11,6 +11,7 @@
  * Note: Update related files together when changing data shape or shared behavior.
  */
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import ExerciseSampleUploadForm from "@/components/exercise-sample-upload-form";
@@ -19,6 +20,7 @@ import TimestampFramePreview from "@/components/timestamp-frame-preview";
 import { generateTimestampScreenshots } from "@/lib/video-screenshots";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function getArchetypeFilterValue(structuralGoal: string | null | undefined): string {
   const value = String(structuralGoal ?? "").toUpperCase();
@@ -291,6 +293,7 @@ export default async function CoachExercisesPage({
       }
     }
 
+    revalidatePath("/coach/exercises");
     redirect("/coach/exercises");
   }
 
@@ -491,6 +494,7 @@ export default async function CoachExercisesPage({
       }
     }
 
+    revalidatePath("/coach/exercises");
     redirect(
       `/coach/exercises?edit=${exerciseId}&sample_saved=1&sample_saved_for=${exerciseId}${
         frameCaptureWarning
@@ -712,6 +716,7 @@ export default async function CoachExercisesPage({
       }
     }
 
+    revalidatePath("/coach/exercises");
     redirect(
       `/coach/exercises?edit=${exerciseId}&updated=${exerciseId}&sample_saved=1&sample_saved_for=${exerciseId}${
         frameCaptureWarning
@@ -1041,64 +1046,95 @@ export default async function CoachExercisesPage({
               {(() => {
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];
                 const latestVideo = exerciseVideos[0];
-                const missingBadge = (value: unknown) =>
-                  value === null || value === undefined || String(value).trim() === "" ? "Missing" : "";
+                const isMissing = (value: unknown) =>
+                  value === null || value === undefined || String(value).trim() === "";
+                const topTsText = latestVideo?.ts_top_seconds != null ? `${latestVideo.ts_top_seconds}s` : null;
+                const middleTsText = latestVideo?.ts_middle_seconds != null ? `${latestVideo.ts_middle_seconds}s` : null;
+                const bottomTsText = latestVideo?.ts_bottom_seconds != null ? `${latestVideo.ts_bottom_seconds}s` : null;
+
+                if (!isEditing) {
+                  return (
+                    <div className="grid md:grid-cols-2 gap-3 text-sm">
+                      <div className="space-y-2">
+                        <p><span className="meta">Name:</span> {exercise.name}</p>
+                        <p><span className="meta">Category:</span> {isMissing(exercise.category) ? <span className="text-red-700 font-medium">Missing</span> : exercise.category}</p>
+                        <p><span className="meta">Group/type:</span> {isMissing(exercise.exercise_group) ? <span className="text-red-700 font-medium">Missing</span> : exercise.exercise_group}</p>
+                        <p><span className="meta">Subgroup:</span> {isMissing(exercise.exercise_subgroup) ? <span className="text-red-700 font-medium">Missing</span> : exercise.exercise_subgroup}</p>
+                        <p><span className="meta">Structural goal:</span> {isMissing(exercise.structural_goal) ? <span className="text-red-700 font-medium">Missing</span> : exercise.structural_goal}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <p><span className="meta">Sample video:</span> {isMissing(latestVideo?.loom_url) ? <span className="text-red-700 font-medium">Missing</span> : latestVideo?.loom_url}</p>
+                        <p><span className="meta">Top timestamp:</span> {topTsText ? topTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
+                        <p><span className="meta">Middle timestamp:</span> {middleTsText ? middleTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
+                        <p><span className="meta">Bottom timestamp:</span> {bottomTsText ? bottomTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <p><span className="meta">Cues:</span> {isMissing(exercise.cues) ? <span className="text-red-700 font-medium">Missing</span> : exercise.cues}</p>
+                        <p><span className="meta">Purpose/impact:</span> {isMissing(exercise.purpose_impact) ? <span className="text-red-700 font-medium">Missing</span> : exercise.purpose_impact}</p>
+                        <p><span className="meta">Where to feel:</span> {isMissing(exercise.where_to_feel) ? <span className="text-red-700 font-medium">Missing</span> : exercise.where_to_feel}</p>
+                        <p><span className="meta">Do examples:</span> {isMissing(exercise.dos_examples) ? <span className="text-red-700 font-medium">Missing</span> : exercise.dos_examples}</p>
+                        <p><span className="meta">Don&apos;t examples:</span> {isMissing(exercise.donts_examples) ? <span className="text-red-700 font-medium">Missing</span> : exercise.donts_examples}</p>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <form id={formId} action={saveExerciseAndSample} className="grid md:grid-cols-2 gap-3">
                     <input type="hidden" name="exercise_id" value={exercise.id} />
                     <label className="text-sm block">Name
-                      <input className="input mt-1" name="name" defaultValue={exercise.name} required />
+                      <input className="input mt-1 py-1 px-2 text-sm" name="name" defaultValue={exercise.name} required />
                     </label>
                     <label className="text-sm block">Sample video
-                      <input className="input mt-1" value={latestVideo?.loom_url ?? ""} readOnly />
+                      <input className="input mt-1 py-1 px-2 text-sm" value={latestVideo?.loom_url ?? ""} readOnly />
                       {!latestVideo?.loom_url && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block">Category
-                      <input className="input mt-1" name="category" defaultValue={exercise.category ?? ""} />
-                      {!!missingBadge(exercise.category) && <span className="text-xs text-red-700">Missing</span>}
+                      <input className="input mt-1 py-1 px-2 text-sm" name="category" defaultValue={exercise.category ?? ""} />
+                      {isMissing(exercise.category) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block">Top timestamp
-                      <input className="input mt-1" value={latestVideo?.ts_top_seconds != null ? `${latestVideo.ts_top_seconds}s` : ""} readOnly />
+                      <input className="input mt-1 py-1 px-2 text-sm" value={topTsText ?? ""} readOnly />
                       {latestVideo && latestVideo?.ts_top_seconds == null && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block">Group/type
-                      <input className="input mt-1" name="exercise_group" defaultValue={exercise.exercise_group ?? ""} required />
+                      <input className="input mt-1 py-1 px-2 text-sm" name="exercise_group" defaultValue={exercise.exercise_group ?? ""} required />
                     </label>
                     <label className="text-sm block">Middle timestamp
-                      <input className="input mt-1" value={latestVideo?.ts_middle_seconds != null ? `${latestVideo.ts_middle_seconds}s` : ""} readOnly />
+                      <input className="input mt-1 py-1 px-2 text-sm" value={middleTsText ?? ""} readOnly />
                       {latestVideo && latestVideo?.ts_middle_seconds == null && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block">Subgroup
-                      <input className="input mt-1" name="exercise_subgroup" defaultValue={exercise.exercise_subgroup ?? ""} />
-                      {!!missingBadge(exercise.exercise_subgroup) && <span className="text-xs text-red-700">Missing</span>}
+                      <input className="input mt-1 py-1 px-2 text-sm" name="exercise_subgroup" defaultValue={exercise.exercise_subgroup ?? ""} />
+                      {isMissing(exercise.exercise_subgroup) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block">Bottom timestamp
-                      <input className="input mt-1" value={latestVideo?.ts_bottom_seconds != null ? `${latestVideo.ts_bottom_seconds}s` : ""} readOnly />
+                      <input className="input mt-1 py-1 px-2 text-sm" value={bottomTsText ?? ""} readOnly />
                       {latestVideo && latestVideo?.ts_bottom_seconds == null && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block md:col-span-2">Structural goal
-                      <input className="input mt-1" name="structural_goal" defaultValue={exercise.structural_goal ?? ""} />
-                      {!!missingBadge(exercise.structural_goal) && <span className="text-xs text-red-700">Missing</span>}
+                      <input className="input mt-1 py-1 px-2 text-sm" name="structural_goal" defaultValue={exercise.structural_goal ?? ""} />
+                      {isMissing(exercise.structural_goal) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block md:col-span-2">Cues
-                      <input className="input mt-1" name="cues" defaultValue={exercise.cues ?? ""} />
-                      {!!missingBadge(exercise.cues) && <span className="text-xs text-red-700">Missing</span>}
+                      <input className="input mt-1 py-1 px-2 text-sm" name="cues" defaultValue={exercise.cues ?? ""} />
+                      {isMissing(exercise.cues) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block md:col-span-2">Purpose/impact
-                      <input className="input mt-1" name="purpose_impact" defaultValue={exercise.purpose_impact ?? ""} />
-                      {!!missingBadge(exercise.purpose_impact) && <span className="text-xs text-red-700">Missing</span>}
+                      <input className="input mt-1 py-1 px-2 text-sm" name="purpose_impact" defaultValue={exercise.purpose_impact ?? ""} />
+                      {isMissing(exercise.purpose_impact) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block md:col-span-2">Where to feel
-                      <input className="input mt-1" name="where_to_feel" defaultValue={exercise.where_to_feel ?? ""} />
-                      {!!missingBadge(exercise.where_to_feel) && <span className="text-xs text-red-700">Missing</span>}
+                      <input className="input mt-1 py-1 px-2 text-sm" name="where_to_feel" defaultValue={exercise.where_to_feel ?? ""} />
+                      {isMissing(exercise.where_to_feel) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block md:col-span-2">Do examples
-                      <textarea className="textarea mt-1" name="dos_examples" defaultValue={exercise.dos_examples ?? ""} />
-                      {!!missingBadge(exercise.dos_examples) && <span className="text-xs text-red-700">Missing</span>}
+                      <textarea className="textarea mt-1 py-1 px-2 text-sm" rows={2} name="dos_examples" defaultValue={exercise.dos_examples ?? ""} />
+                      {isMissing(exercise.dos_examples) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <label className="text-sm block md:col-span-2">Don&apos;t examples
-                      <textarea className="textarea mt-1" name="donts_examples" defaultValue={exercise.donts_examples ?? ""} />
-                      {!!missingBadge(exercise.donts_examples) && <span className="text-xs text-red-700">Missing</span>}
+                      <textarea className="textarea mt-1 py-1 px-2 text-sm" rows={2} name="donts_examples" defaultValue={exercise.donts_examples ?? ""} />
+                      {isMissing(exercise.donts_examples) && <span className="text-xs text-red-700">Missing</span>}
                     </label>
                     <h3 className="text-base font-semibold md:col-span-2">Sample Video Source (1 file or 1 link)</h3>
                     <ExerciseSampleUploadForm
