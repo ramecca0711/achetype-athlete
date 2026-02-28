@@ -144,7 +144,7 @@ export default function LoginPage() {
         <div className="flex items-center justify-between">
           <p className="badge inline-block">Your Portal</p>
         </div>
-        <h1 className="text-3xl sm:text-4xl mt-4">Archetype Athlete portal</h1>
+        <h1 className="text-3xl sm:text-4xl mt-4">Archetype Athlete Portal</h1>
         <p className="meta mt-2">Programming, video submissions, AI notes, and coach feedback queue.</p>
 
         <div className="mt-6 grid grid-cols-2 gap-2">
