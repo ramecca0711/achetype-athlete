@@ -9,6 +9,8 @@
  */
 import type { Metadata } from "next";
 import { Abril_Fatface, Poppins } from "next/font/google";
+import { createSupabaseServer } from "@/lib/supabase/server";
+import type { AppRole } from "@/lib/types";
 import "./globals.css";
 import RightSidebar from "@/components/right-sidebar";
 
@@ -27,8 +29,6 @@ const poppins = Poppins({
   variable: "--font-body",
   display: "swap"
 });
-import { createSupabaseServer } from "@/lib/supabase/server";
-import type { AppRole } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Gunther Athlete Portal",
