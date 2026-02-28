@@ -22,9 +22,20 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, onboarding_completed")
+    // Also fetch approval_status so we can gate pending coach/admin accounts
+    .select("role, onboarding_completed, approval_status")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Block coach and admin accounts that haven't been approved yet.
+  // Athletes go live immediately; coach/admin require admin sign-off.
+  if (
+    profile?.role &&
+    ["coach", "admin"].includes(profile.role) &&
+    profile.approval_status === "pending"
+  ) {
+    redirect("/pending-approval");
+  }
 
   if (profile?.role === "admin") {
     redirect("/admin");

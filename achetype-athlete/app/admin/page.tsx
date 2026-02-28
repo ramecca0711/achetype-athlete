@@ -105,6 +105,26 @@ export default async function AdminPage() {
     revalidatePath("/admin");
   }
 
+  async function approveAccount(formData: FormData) {
+    "use server";
+    // Flip approval_status to 'approved' — allows the user to access the portal
+    const { sb } = await assertAdmin();
+    const profileId = String(formData.get("profile_id") ?? "").trim();
+    if (!profileId) return;
+    await sb.from("profiles").update({ approval_status: "approved" }).eq("id", profileId);
+    revalidatePath("/admin");
+  }
+
+  async function rejectAccount(formData: FormData) {
+    "use server";
+    // Mark as rejected so the user stays in the waiting room and can be informed manually
+    const { sb } = await assertAdmin();
+    const profileId = String(formData.get("profile_id") ?? "").trim();
+    if (!profileId) return;
+    await sb.from("profiles").update({ approval_status: "rejected" }).eq("id", profileId);
+    revalidatePath("/admin");
+  }
+
   const [
     { data: profiles },
     { data: athletes },
@@ -112,9 +132,12 @@ export default async function AdminPage() {
     { data: assignments },
     { count: athleteCount },
     { count: coachCount },
-    { count: pendingCount }
+    { count: pendingCount },
+    // Fetch coach/admin accounts that are awaiting approval
+    { data: pendingApprovals }
   ] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, role, member_since").order("created_at", { ascending: false }),
+    // Include approval_status so the User Roles table can show pending state
+    supabase.from("profiles").select("id, full_name, email, role, member_since, approval_status").order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name, email").eq("role", "athlete").order("full_name", { ascending: true }),
     supabase.from("profiles").select("id, full_name, email").eq("role", "coach").order("full_name", { ascending: true }),
     supabase
@@ -125,7 +148,9 @@ export default async function AdminPage() {
       .order("id", { ascending: false }),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "athlete"),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "coach"),
-    supabase.from("exercise_submissions").select("id", { count: "exact", head: true }).eq("status", "pending_review")
+    supabase.from("exercise_submissions").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
+    // Pending approval queue: coach and admin accounts not yet approved
+    supabase.from("profiles").select("id, full_name, email, role, member_since").in("role", ["coach", "admin"]).eq("approval_status", "pending").order("created_at", { ascending: true })
   ]);
 
   const cookieStore = await cookies();
@@ -215,14 +240,59 @@ export default async function AdminPage() {
         </div>
       </section>
 
+      {/* Pending Approvals — coach and admin accounts waiting for sign-off */}
+      <section className="card p-6">
+        <h2 className="text-2xl">Pending Approvals</h2>
+        <p className="meta mt-1">
+          New coach and admin accounts require approval before they can access the portal.
+        </p>
+        <div className="space-y-2 mt-3">
+          {(pendingApprovals ?? []).map((pending: any) => (
+            <div key={pending.id} className="border rounded-xl p-3 bg-white flex flex-wrap gap-2 items-center justify-between">
+              <div>
+                <p className="font-semibold">{pending.full_name ?? "(no name yet)"}</p>
+                <p className="text-sm meta">
+                  {pending.email} · <span className="badge">{pending.role}</span>
+                  {pending.member_since && <span> · Registered {pending.member_since}</span>}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {/* Approve button — sets approval_status = 'approved', unblocks the user */}
+                <form action={approveAccount}>
+                  <input type="hidden" name="profile_id" value={pending.id} />
+                  <button className="btn btn-primary" type="submit">Approve</button>
+                </form>
+                {/* Reject button — sets approval_status = 'rejected', keeps user in waiting room */}
+                <form action={rejectAccount}>
+                  <input type="hidden" name="profile_id" value={pending.id} />
+                  <button className="btn btn-danger" type="submit">Reject</button>
+                </form>
+              </div>
+            </div>
+          ))}
+          {!pendingApprovals?.length && (
+            <p className="meta">No accounts pending approval.</p>
+          )}
+        </div>
+      </section>
+
       <section className="card p-6">
         <h2 className="text-2xl">User Roles</h2>
         <div className="space-y-2 mt-3">
-          {(profiles ?? []).map((profile) => (
-            // Each row: name/email | role select | Save | Delete (trash can with confirm)
+          {(profiles ?? []).map((profile: any) => (
+            // Each row: name/email | pending badge? | role select | Save | Delete
             <div key={profile.id} className="border rounded-xl p-3 bg-white grid md:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
               <div>
-                <p className="font-semibold">{profile.full_name}</p>
+                <p className="font-semibold">
+                  {profile.full_name}
+                  {/* Surface pending status inline so admin can see at a glance */}
+                  {profile.approval_status === "pending" && (
+                    <span className="badge ml-2" style={{ color: "#b45309", borderColor: "#fcd34d" }}>pending</span>
+                  )}
+                  {profile.approval_status === "rejected" && (
+                    <span className="badge ml-2" style={{ color: "#b91c1c", borderColor: "#fca5a5" }}>rejected</span>
+                  )}
+                </p>
                 <p className="text-sm meta">{profile.email} · Member since {profile.member_since}</p>
               </div>
               {/* Role update form — only wraps the select + save button */}

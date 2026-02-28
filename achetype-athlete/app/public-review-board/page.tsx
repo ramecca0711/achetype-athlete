@@ -66,16 +66,29 @@ export default async function PublicReviewBoardPage({
     const messageId = String(formData.get("message_id") ?? "").trim();
     if (!messageId) redirect("/public-review-board?delete_error=missing_id");
 
-    const { error } = await sb
+    // Use .select("id") so we can detect if 0 rows matched.
+    // Supabase DELETE silently succeeds with no error even when nothing is deleted
+    // (e.g. RLS blocks the row or the message belongs to someone else).
+    const { data: deleted, error } = await sb
       .from("public_review_board_messages")
       .delete()
       .eq("id", messageId)
       .eq("sender_id", actionUser.id)
-      .eq("message_type", "chat");
+      .eq("message_type", "chat")
+      .select("id");
 
     if (error) {
+      console.error("[deleteBoardMessage] delete error:", error.message, error.details);
       redirect(`/public-review-board?delete_error=${encodeURIComponent(error.message.slice(0, 120))}`);
     }
+
+    // If no rows came back the delete matched nothing — likely an RLS policy
+    // blocking the operation or the message_id / sender_id not matching.
+    if (!deleted?.length) {
+      console.error("[deleteBoardMessage] 0 rows deleted for message:", messageId, "user:", actionUser.id);
+      redirect("/public-review-board?delete_error=not_found");
+    }
+
     redirect("/public-review-board?delete_status=ok");
   }
 
@@ -106,7 +119,12 @@ export default async function PublicReviewBoardPage({
           <p className="text-green-700 text-sm mt-2">Message posted.</p>
         )}
         {!!searchParams?.delete_error && (
-          <p className="text-red-700 text-sm mt-2">Delete failed: {searchParams.delete_error}</p>
+          <p className="text-red-700 text-sm mt-2">
+            Delete failed:{" "}
+            {searchParams.delete_error === "not_found" && "message not found or you don't own it."}
+            {searchParams.delete_error === "missing_id" && "missing message ID."}
+            {!["not_found", "missing_id"].includes(searchParams.delete_error) && searchParams.delete_error}
+          </p>
         )}
         {searchParams?.delete_status === "ok" && (
           <p className="text-green-700 text-sm mt-2">Message deleted.</p>
@@ -150,8 +168,14 @@ export default async function PublicReviewBoardPage({
                   {message.message_type === "chat" && message.sender_id === user.id && (
                     <form action={deleteBoardMessage}>
                       <input type="hidden" name="message_id" value={message.id} />
-                      <button className="badge" type="submit" title="Delete chat" aria-label="Delete chat">
-                        🗑️
+                      {/* Use btn-danger so it looks like a real clickable button, not a label */}
+                      <button className="btn btn-danger" type="submit" title="Delete message" aria-label="Delete message">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M10 10v6M14 10v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
                       </button>
                     </form>
                   )}

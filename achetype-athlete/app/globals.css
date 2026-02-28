@@ -7,7 +7,7 @@
  * Note: Update related files together when changing data shape or shared behavior.
  *
  * Design language: "refined editorial luxury" — drawn from guntherklaus.com/archetype-athlete
- * Key references: Abril Fatface headings, Poppins body, warm off-white bg,
+ * Key references: Oswald 600 headings (condensed, angular), Poppins body, warm off-white bg,
  *   bronze (#BD9256) accent, near-black sidebar, minimal angular borders.
  */
 @tailwind base;
@@ -42,14 +42,14 @@ body {
   line-height: 1.6;
 }
 
-/* Abril Fatface for all headings — gives the editorial luxury feel */
+/* Oswald for all headings — condensed, angular, sporty (replaces curly Abril Fatface) */
 h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-heading), "Georgia", serif;
-  font-weight: 400;   /* Abril Fatface is inherently heavy; 400 maps to its display weight */
-  letter-spacing: -0.01em;
+  font-family: var(--font-heading), "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   line-height: 1.2;
 }
 
@@ -146,7 +146,8 @@ h4 {
 
 .sidebar-link {
   text-decoration: none;
-  color: #b0a898;          /* warm mid-tone on dark sidebar */
+  /* Brighter base color — easier to read on dark sidebar */
+  color: #d4c9bb;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -157,12 +158,12 @@ h4 {
   transition: color 0.15s;
 }
 
-/* Small icon wrapper — inherits link color so it tints with active/hover */
+/* Small icon wrapper — inherits link color; higher opacity so icons read clearly */
 .sidebar-icon {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 
 .sidebar-link:hover {
@@ -181,9 +182,9 @@ h4 {
   font-size: 0.78rem;
 }
 
-/* Muted text (email / role) on dark sidebar */
+/* Muted text (email / role) on dark sidebar — slightly brighter than before */
 .right-sidebar .meta {
-  color: #635c52;
+  color: #7a7168;
 }
 
 .sidebar-signout {
@@ -392,7 +393,9 @@ details[open] > summary::after {
   }
 }
 
-@media (max-width: 900px) {
+/* Keep the sidebar as a right-side column down to tablet widths.
+   Only collapse to a bottom strip on very small phones (< 520px). */
+@media (max-width: 520px) {
   .app-shell {
     display: block;
   }

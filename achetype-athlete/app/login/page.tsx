@@ -101,7 +101,10 @@ export default function LoginPage() {
                   coach_id: signupRole === "athlete" ? signupCoachId : null,
                   gender: signupGender || null,
                   // Birthday, age, and height are collected during onboarding after account creation
-                  weight_lbs: signupWeightLbs || null
+                  weight_lbs: signupWeightLbs || null,
+                  // Pass approval_status in metadata so the DB trigger can write it to profiles.
+                  // Coach and admin accounts start as 'pending' — an admin must approve before access.
+                  approval_status: ["coach", "admin"].includes(signupRole) ? "pending" : "approved"
                 }
               }
             })
@@ -121,7 +124,13 @@ export default function LoginPage() {
     }
 
     if (mode === "signup") {
-      setMessage("Account created. Sign in to open your portal.");
+      // Give coach/admin a clearer message that they need approval before logging in
+      const needsApproval = ["coach", "admin"].includes(signupRole);
+      setMessage(
+        needsApproval
+          ? "Account created. An admin must approve your account before you can sign in. Contact an existing admin."
+          : "Account created. Sign in to open your portal."
+      );
     } else {
       router.replace("/");
       router.refresh();

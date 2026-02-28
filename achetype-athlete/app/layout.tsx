@@ -8,15 +8,16 @@
  * Note: Update related files together when changing data shape or shared behavior.
  */
 import type { Metadata } from "next";
-import { Abril_Fatface, Poppins } from "next/font/google";
+// Oswald replaces Abril Fatface — angular, condensed, sporty (no curly serifs)
+import { Oswald, Poppins } from "next/font/google";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types";
 import "./globals.css";
 import RightSidebar from "@/components/right-sidebar";
 
-// Abril Fatface: editorial display serif for headings (matches Gunther Klaus site)
-const abrilFatface = Abril_Fatface({
-  weight: "400",
+// Oswald 600: condensed, angular sans-serif — sporty, no decorative serifs
+const oswald = Oswald({
+  weight: ["600"],
   subsets: ["latin"],
   variable: "--font-heading",
   display: "swap"
@@ -63,7 +64,7 @@ export default async function RootLayout({
   const auth = await getAuthSummary();
 
   return (
-    <html lang="en" className={`${abrilFatface.variable} ${poppins.variable}`}>
+    <html lang="en" className={`${oswald.variable} ${poppins.variable}`}>
       <body>
         <div className="app-shell">
           <div className="app-main">{children}</div>
