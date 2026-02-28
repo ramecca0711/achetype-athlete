@@ -1006,7 +1006,7 @@ export default async function CoachExercisesPage({
                             🗑️
                           </button>
                         </form>
-                        <DetailsEditToggle detailsId={detailsId} formId={formId} initiallyOpen={isOpen} closeLabel={isEditing ? "Cancel" : "Close"} />
+                        <DetailsEditToggle detailsId={detailsId} formId={formId} initiallyEditing={isEditing} closeLabel="Cancel" />
                       </div>
                     </div>
                     {!!missingFields.length && (

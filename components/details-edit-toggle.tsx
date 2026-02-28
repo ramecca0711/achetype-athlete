@@ -5,7 +5,7 @@ import { useState } from "react";
 type Props = {
   detailsId: string;
   formId?: string;
-  initiallyOpen?: boolean;
+  initiallyEditing?: boolean;
   className?: string;
   editLabel?: string;
   closeLabel?: string;
@@ -14,12 +14,12 @@ type Props = {
 export default function DetailsEditToggle({
   detailsId,
   formId,
-  initiallyOpen = false,
+  initiallyEditing = false,
   className = "badge",
   editLabel = "Edit",
   closeLabel = "Cancel"
 }: Props) {
-  const [open, setOpen] = useState(initiallyOpen);
+  const [editing, setEditing] = useState(initiallyEditing);
 
   return (
     <button
@@ -30,22 +30,34 @@ export default function DetailsEditToggle({
         event.stopPropagation();
         const details = document.getElementById(detailsId) as HTMLDetailsElement | null;
         if (!details) return;
-        const next = !details.open;
-        const wasEditing = details.dataset.editing === "1";
-        if (next) {
+        const isEditingNow = details.dataset.editing === "1" || editing;
+
+        // Closed card: always open directly into edit mode.
+        if (!details.open) {
+          details.open = true;
           details.dataset.editing = "1";
-        } else {
+          setEditing(true);
+          return;
+        }
+
+        if (isEditingNow) {
+          // Cancel edit: reset form and return to read-only view, keep card open.
+          if (formId) {
+            const form = document.getElementById(formId) as HTMLFormElement | null;
+            form?.reset();
+          }
           details.dataset.editing = "0";
+          details.open = true;
+          setEditing(false);
+        } else {
+          // Read-only open card: switch into edit mode in place.
+          details.dataset.editing = "1";
+          details.open = true;
+          setEditing(true);
         }
-        if (!next && formId && wasEditing) {
-          const form = document.getElementById(formId) as HTMLFormElement | null;
-          form?.reset();
-        }
-        details.open = next;
-        setOpen(next);
       }}
     >
-      {open ? closeLabel : editLabel}
+      {editing ? closeLabel : editLabel}
     </button>
   );
 }
