@@ -718,7 +718,7 @@ export default async function CoachExercisesPage({
 
     revalidatePath("/coach/exercises");
     redirect(
-      `/coach/exercises?edit=${exerciseId}&updated=${exerciseId}&sample_saved=1&sample_saved_for=${exerciseId}${
+      `/coach/exercises?updated=${exerciseId}&sample_saved=1&sample_saved_for=${exerciseId}${
         frameCaptureWarning
           ? `&sample_warning=frame_capture_unavailable&sample_debug=${encodeURIComponent(frameCaptureWarning)}`
           : ""
@@ -957,10 +957,12 @@ export default async function CoachExercisesPage({
               <div className="space-y-2">
                 {(groupedFiltered[group] ?? []).map((exercise) => {
             const isEditing = currentEditId === exercise.id;
+            const isOpenAfterSave = searchParams?.updated === exercise.id || sampleSavedForId === exercise.id;
+            const isOpen = isEditing || isOpenAfterSave;
             const detailsId = `exercise-details-${exercise.id}`;
             const formId = `exercise-edit-form-${exercise.id}`;
             return (
-            <details id={detailsId} key={exercise.id} className="metric p-3" open={isEditing}>
+            <details id={detailsId} key={exercise.id} className="metric p-3" open={isOpen}>
               <summary className="cursor-pointer list-none">
               {(() => {
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];
@@ -998,7 +1000,7 @@ export default async function CoachExercisesPage({
                             🗑️
                           </button>
                         </form>
-                        <DetailsEditToggle detailsId={detailsId} formId={formId} initiallyOpen={isEditing} closeLabel="Cancel" />
+                        <DetailsEditToggle detailsId={detailsId} formId={formId} initiallyOpen={isOpen} closeLabel={isEditing ? "Cancel" : "Close"} />
                       </div>
                     </div>
                     {!!missingFields.length && (
@@ -1015,16 +1017,16 @@ export default async function CoachExercisesPage({
               })()}
               </summary>
               <div className="mt-3 space-y-3">
-              {searchParams?.edit === exercise.id && searchParams?.updated === exercise.id && (
+              {searchParams?.updated === exercise.id && (
                 <p className="text-xs text-green-700">Exercise details saved.</p>
               )}
               {searchParams?.edit === exercise.id && searchParams?.update_error === "save_failed" && (
                 <p className="text-xs text-red-700">Save failed: could not update exercise details.</p>
               )}
-              {searchParams?.edit === exercise.id && searchParams?.sample_saved === "1" && (
+              {sampleSavedForId === exercise.id && searchParams?.sample_saved === "1" && (
                 <p className="text-xs text-green-700">Sample video and timestamps saved.</p>
               )}
-              {searchParams?.edit === exercise.id && searchParams?.sample_warning === "frame_capture_unavailable" && (
+              {sampleSavedForId === exercise.id && searchParams?.sample_warning === "frame_capture_unavailable" && (
                 <p className="text-xs text-amber-700">
                   Screenshot capture unavailable for this link. Saved video/timestamps only.
                   {searchParams?.sample_debug ? ` (debug: ${searchParams.sample_debug})` : ""}
@@ -1051,10 +1053,13 @@ export default async function CoachExercisesPage({
                 const topTsText = latestVideo?.ts_top_seconds != null ? `${latestVideo.ts_top_seconds}s` : null;
                 const middleTsText = latestVideo?.ts_middle_seconds != null ? `${latestVideo.ts_middle_seconds}s` : null;
                 const bottomTsText = latestVideo?.ts_bottom_seconds != null ? `${latestVideo.ts_bottom_seconds}s` : null;
+                const topImageUrl = repPhotoByExerciseAndPosition.get(`${exercise.id}:top`) ?? "";
+                const middleImageUrl = repPhotoByExerciseAndPosition.get(`${exercise.id}:middle`) ?? "";
+                const bottomImageUrl = repPhotoByExerciseAndPosition.get(`${exercise.id}:bottom`) ?? "";
 
-                if (!isEditing) {
-                  return (
-                    <div className="grid md:grid-cols-2 gap-3 text-sm">
+                return (
+                  <>
+                    <div className="exercise-read-view grid md:grid-cols-2 gap-3 text-sm">
                       <div className="space-y-2">
                         <p><span className="meta">Name:</span> {exercise.name}</p>
                         <p><span className="meta">Category:</span> {isMissing(exercise.category) ? <span className="text-red-700 font-medium">Missing</span> : exercise.category}</p>
@@ -1067,6 +1072,9 @@ export default async function CoachExercisesPage({
                         <p><span className="meta">Top timestamp:</span> {topTsText ? topTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
                         <p><span className="meta">Middle timestamp:</span> {middleTsText ? middleTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
                         <p><span className="meta">Bottom timestamp:</span> {bottomTsText ? bottomTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
+                        <p><span className="meta">Top image:</span> {topImageUrl ? <span>See below</span> : <span className="text-red-700 font-medium">Missing</span>}</p>
+                        <p><span className="meta">Middle image:</span> {middleImageUrl ? <span>See below</span> : <span className="text-red-700 font-medium">Missing</span>}</p>
+                        <p><span className="meta">Bottom image:</span> {bottomImageUrl ? <span>See below</span> : <span className="text-red-700 font-medium">Missing</span>}</p>
                       </div>
                       <div className="md:col-span-2 space-y-2">
                         <p><span className="meta">Cues:</span> {isMissing(exercise.cues) ? <span className="text-red-700 font-medium">Missing</span> : exercise.cues}</p>
@@ -1076,11 +1084,7 @@ export default async function CoachExercisesPage({
                         <p><span className="meta">Don&apos;t examples:</span> {isMissing(exercise.donts_examples) ? <span className="text-red-700 font-medium">Missing</span> : exercise.donts_examples}</p>
                       </div>
                     </div>
-                  );
-                }
-
-                return (
-                  <form id={formId} action={saveExerciseAndSample} className="grid md:grid-cols-2 gap-3">
+                  <form id={formId} action={saveExerciseAndSample} className="exercise-edit-view grid md:grid-cols-2 gap-3">
                     <input type="hidden" name="exercise_id" value={exercise.id} />
                     <label className="text-sm block">Name
                       <input className="input mt-1 py-1 px-2 text-sm" name="name" defaultValue={exercise.name} required />
@@ -1163,6 +1167,7 @@ export default async function CoachExercisesPage({
                     />
                     <button className="btn btn-primary md:col-span-2" type="submit">Save Sample</button>
                   </form>
+                  </>
                 );
               })()}
               {(() => {
@@ -1171,18 +1176,16 @@ export default async function CoachExercisesPage({
                 if (!latestVideo?.loom_url) return null;
 
                 return (
-                  <details className="metric p-3" open={false}>
-                    <summary className="cursor-pointer list-none">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <p className="text-sm font-semibold">Saved Sample (latest)</p>
-                        <span className="badge">highlighted</span>
-                      </div>
-                      <p className="text-xs mt-1 truncate">
-                        <a className="plain-link" href={latestVideo.loom_url} target="_blank">
-                          {latestVideo.loom_url}
-                        </a>
-                      </p>
-                    </summary>
+                  <div className="metric p-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="text-sm font-semibold">Saved Sample (latest)</p>
+                      <span className="badge">highlighted</span>
+                    </div>
+                    <p className="text-xs mt-1 truncate">
+                      <a className="plain-link" href={latestVideo.loom_url} target="_blank">
+                        {latestVideo.loom_url}
+                      </a>
+                    </p>
                     <div className="mt-3 grid md:grid-cols-3 gap-2">
                       {([
                         { key: "top", label: "Top frame", ts: latestVideo.ts_top_seconds },
@@ -1218,7 +1221,7 @@ export default async function CoachExercisesPage({
                         );
                       })}
                     </div>
-                  </details>
+                  </div>
                 );
               })()}
               {/* Feedback history: shows all notes this coach has given for this exercise across all athletes */}

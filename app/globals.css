@@ -385,6 +385,19 @@ details[open] > summary::after {
   content: "^";
 }
 
+/* Exercise card view/edit swapping: compact read view by default, inline small inputs only when open */
+.exercise-edit-view {
+  display: none;
+}
+
+details[open] .exercise-read-view {
+  display: none;
+}
+
+details[open] .exercise-edit-view {
+  display: grid;
+}
+
 /* ─── Responsive ────────────────────────────────────── */
 
 @media (min-width: 768px) {
