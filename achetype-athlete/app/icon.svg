@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Dark background matching the site's #1a1a1a near-black -->
+  <rect width="32" height="32" rx="6" fill="#1a1a1a"/>
+  <!-- Dumbbell / barbell icon in bronze (#BD9256) -->
+  <!-- Left collar plate -->
+  <rect x="3" y="10" width="4" height="12" rx="1.5" fill="#BD9256"/>
+  <!-- Right collar plate -->
+  <rect x="25" y="10" width="4" height="12" rx="1.5" fill="#BD9256"/>
+  <!-- Left grip sleeve -->
+  <rect x="7" y="12.5" width="3.5" height="7" rx="1" fill="#BD9256"/>
+  <!-- Right grip sleeve -->
+  <rect x="21.5" y="12.5" width="3.5" height="7" rx="1" fill="#BD9256"/>
+  <!-- Bar connecting the two ends -->
+  <rect x="10.5" y="14.5" width="11" height="3" rx="1" fill="#BD9256"/>
+</svg>

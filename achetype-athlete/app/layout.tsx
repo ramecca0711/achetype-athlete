@@ -31,7 +31,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Gunther Athlete Portal",
+  title: "Archetype Athlete Portal",
   description: "Training programs, Loom submissions, and coach review workflows"
 };
 

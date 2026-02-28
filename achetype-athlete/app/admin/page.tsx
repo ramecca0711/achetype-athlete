@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import AdminDeleteMemberButton from "@/components/admin-delete-member-button";
 
 async function assertAdmin() {
   const sb = createSupabaseServer();
@@ -85,6 +86,22 @@ export default async function AdminPage() {
       cookieStore.set("admin_view_athlete_id", athleteId, { path: "/", sameSite: "lax" });
     }
 
+    revalidatePath("/admin");
+  }
+
+  async function deleteProfile(formData: FormData) {
+    "use server";
+    // Only admins can delete members; assertAdmin() guards this
+    const { sb } = await assertAdmin();
+
+    const profileId = String(formData.get("profile_id") ?? "").trim();
+    if (!profileId) {
+      revalidatePath("/admin");
+      return;
+    }
+
+    // Delete the profile row; cascade handles related athlete_relationships rows
+    await sb.from("profiles").delete().eq("id", profileId);
     revalidatePath("/admin");
   }
 
@@ -202,19 +219,30 @@ export default async function AdminPage() {
         <h2 className="text-2xl">User Roles</h2>
         <div className="space-y-2 mt-3">
           {(profiles ?? []).map((profile) => (
-            <form key={profile.id} action={updateRole} className="border rounded-xl p-3 bg-white grid md:grid-cols-[1fr_auto_auto] gap-2 items-center">
-              <input type="hidden" name="profile_id" value={profile.id} />
+            // Each row: name/email | role select | Save | Delete (trash can with confirm)
+            <div key={profile.id} className="border rounded-xl p-3 bg-white grid md:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
               <div>
                 <p className="font-semibold">{profile.full_name}</p>
                 <p className="text-sm meta">{profile.email} · Member since {profile.member_since}</p>
               </div>
-              <select name="role" className="select" defaultValue={profile.role}>
-                <option value="athlete">athlete</option>
-                <option value="coach">coach</option>
-                <option value="admin">admin</option>
-              </select>
-              <button className="btn btn-primary" type="submit">Save</button>
-            </form>
+              {/* Role update form — only wraps the select + save button */}
+              <form action={updateRole} className="contents">
+                <input type="hidden" name="profile_id" value={profile.id} />
+                <select name="role" className="select" defaultValue={profile.role}>
+                  <option value="athlete">athlete</option>
+                  <option value="coach">coach</option>
+                  <option value="admin">admin</option>
+                </select>
+                <button className="btn btn-primary" type="submit">Save</button>
+              </form>
+              {/* Delete button — separate form with client-side confirm dialog */}
+              <AdminDeleteMemberButton
+                profileId={profile.id}
+                fullName={profile.full_name ?? ""}
+                email={profile.email ?? ""}
+                action={deleteProfile}
+              />
+            </div>
           ))}
         </div>
       </section>

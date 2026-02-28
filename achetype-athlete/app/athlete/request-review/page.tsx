@@ -124,6 +124,8 @@ export default async function AthleteRequestReviewPage({
       .single();
 
     if (requestInsertError || !request?.id) {
+      // Log the actual Supabase error so it shows in Vercel function logs
+      console.error("[submitRequest] review_requests insert failed:", requestInsertError?.message, requestInsertError?.details, requestInsertError?.hint);
       redirect("/athlete/request-review?error=submit_failed");
     }
 

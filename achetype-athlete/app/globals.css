@@ -147,12 +147,22 @@ h4 {
 .sidebar-link {
   text-decoration: none;
   color: #b0a898;          /* warm mid-tone on dark sidebar */
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.28rem 0.15rem;
   margin: 0.08rem 0;
   font-size: 0.82rem;
   border-left: 2px solid transparent;
   transition: color 0.15s;
+}
+
+/* Small icon wrapper — inherits link color so it tints with active/hover */
+.sidebar-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0.75;
 }
 
 .sidebar-link:hover {
@@ -246,6 +256,18 @@ h4 {
 
 .btn-secondary:hover {
   background: var(--bg);
+}
+
+/* Destructive action — red for irreversible deletes */
+.btn-danger {
+  background: #fff;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.btn-danger:hover {
+  background: #fef2f2;
+  border-color: #b91c1c;
 }
 
 /* ─── Badge ─────────────────────────────────────────── */
