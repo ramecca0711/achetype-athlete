@@ -46,6 +46,7 @@ export default async function CoachExercisesPage({
     archetype?: string;
     deleted?: string;
     delete_error?: string;
+    update_error?: string;
     search?: string;
   };
 }) {
@@ -510,8 +511,9 @@ export default async function CoachExercisesPage({
 
     const exerciseId = String(formData.get("exercise_id") ?? "").trim();
     if (!exerciseId) redirect("/coach/exercises");
+    const closeAfterSave = String(formData.get("close_after_save") ?? "") === "1";
 
-    await sb
+    const { data: updatedRows, error: updateError } = await sb
       .from("exercises")
       .update({
         name: String(formData.get("name") ?? "").trim(),
@@ -525,9 +527,14 @@ export default async function CoachExercisesPage({
         dos_examples: String(formData.get("dos_examples") ?? "").trim() || null,
         donts_examples: String(formData.get("donts_examples") ?? "").trim() || null
       })
-      .eq("id", exerciseId);
+      .eq("id", exerciseId)
+      .select("id");
 
-    redirect(`/coach/exercises?updated=${exerciseId}`);
+    if (updateError || !updatedRows?.length) {
+      redirect(`/coach/exercises?edit=${exerciseId}&update_error=save_failed`);
+    }
+
+    redirect(closeAfterSave ? `/coach/exercises?updated=${exerciseId}` : `/coach/exercises?edit=${exerciseId}&updated=${exerciseId}`);
   }
 
   async function deleteExercise(formData: FormData) {
@@ -804,7 +811,7 @@ export default async function CoachExercisesPage({
                           href={isEditing ? "/coach/exercises" : `/coach/exercises?edit=${exercise.id}`}
                           className="badge"
                         >
-                          {isEditing ? "Done" : "Edit"}
+                          {isEditing ? "Close" : "Edit"}
                         </a>
                       </div>
                     </div>
@@ -941,6 +948,12 @@ export default async function CoachExercisesPage({
 
               {isEditing && (
                 <div className="metric p-3 space-y-3">
+                  {searchParams?.edit === exercise.id && searchParams?.updated === exercise.id && (
+                    <p className="text-xs text-green-700">Exercise details saved.</p>
+                  )}
+                  {searchParams?.edit === exercise.id && searchParams?.update_error === "save_failed" && (
+                    <p className="text-xs text-red-700">Save failed: could not update exercise details.</p>
+                  )}
                   {searchParams?.edit === exercise.id && searchParams?.sample_saved === "1" && (
                     <p className="text-xs text-green-700">Sample video and timestamps saved.</p>
                   )}
@@ -995,7 +1008,10 @@ export default async function CoachExercisesPage({
                     <label className="text-sm block md:col-span-2">Don&apos;t examples
                       <textarea className="textarea mt-1" name="donts_examples" defaultValue={exercise.donts_examples ?? ""} />
                     </label>
-                    <button className="btn btn-secondary md:col-span-2" type="submit">Save Exercise Details</button>
+                    <div className="md:col-span-2 flex gap-2 flex-wrap">
+                      <button className="btn btn-secondary" type="submit">Save Exercise Details</button>
+                      <button className="btn btn-secondary" type="submit" name="close_after_save" value="1">Save + Close</button>
+                    </div>
                   </form>
 
                   <div>
