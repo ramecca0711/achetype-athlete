@@ -15,7 +15,17 @@ import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import RequestReviewForm from "@/components/request-review-form";
 import TimestampFramePreview from "@/components/timestamp-frame-preview";
+import ClearTransientQuery from "@/components/clear-transient-query";
 import { confidencePhrases } from "@/lib/types";
+
+type ExerciseSamplePhotosByExercise = Record<
+  string,
+  {
+    top?: string;
+    middle?: string;
+    bottom?: string;
+  }
+>;
 
 export default async function AthleteRequestReviewPage({
   searchParams
@@ -56,14 +66,17 @@ export default async function AthleteRequestReviewPage({
 
   if (profile?.role !== "athlete" && me?.role !== "admin") redirect("/");
 
-  const exerciseIds = (requests ?? [])
+  const requestedExerciseIds = (requests ?? [])
     .map((request: any) => request.exercise_id)
     .filter(Boolean);
-  const { data: repPhotos } = exerciseIds.length
+  const selectableExerciseIds = (exercises ?? []).map((exercise: any) => exercise.id).filter(Boolean);
+  const repPhotoExerciseIds = Array.from(new Set([...requestedExerciseIds, ...selectableExerciseIds]));
+
+  const { data: repPhotos } = repPhotoExerciseIds.length
     ? await supabase
         .from("exercise_rep_photos")
         .select("exercise_id, photo_position, image_url, created_at")
-        .in("exercise_id", exerciseIds)
+        .in("exercise_id", repPhotoExerciseIds)
         .order("created_at", { ascending: false })
     : { data: [] as any[] };
 
@@ -73,6 +86,18 @@ export default async function AthleteRequestReviewPage({
     if (!samplePhotoByExerciseAndPosition.has(key)) {
       samplePhotoByExerciseAndPosition.set(key, row.image_url);
     }
+  }
+
+  const samplePhotosByExercise: ExerciseSamplePhotosByExercise = {};
+  for (const row of repPhotos ?? []) {
+    if (!row?.exercise_id || !row?.photo_position || !row?.image_url) continue;
+    if (!samplePhotosByExercise[row.exercise_id]) {
+      samplePhotosByExercise[row.exercise_id] = {};
+    }
+    const bucket = samplePhotosByExercise[row.exercise_id];
+    if (row.photo_position === "top" && !bucket.top) bucket.top = row.image_url;
+    if (row.photo_position === "middle" && !bucket.middle) bucket.middle = row.image_url;
+    if (row.photo_position === "bottom" && !bucket.bottom) bucket.bottom = row.image_url;
   }
 
   async function submitRequest(formData: FormData) {
@@ -101,6 +126,23 @@ export default async function AthleteRequestReviewPage({
     const videoUrls = JSON.parse(String(formData.get("request_video_urls") ?? "[]")) as string[];
     const videoDurations = JSON.parse(String(formData.get("request_video_durations") ?? "[]")) as number[];
 
+    function toIntOrNull(value: FormDataEntryValue | null): number | null {
+      const parsed = Number(value ?? "");
+      if (!Number.isFinite(parsed)) return null;
+      return Math.round(parsed);
+    }
+
+    function toConfidence(value: FormDataEntryValue | null): number {
+      const parsed = Number(value ?? 3);
+      if (!Number.isFinite(parsed)) return 3;
+      return Math.min(5, Math.max(1, Math.round(parsed)));
+    }
+
+    const tsTop = toIntOrNull(formData.get("ts_top_seconds"));
+    const tsMiddle = toIntOrNull(formData.get("ts_middle_seconds"));
+    const tsBottom = toIntOrNull(formData.get("ts_bottom_seconds"));
+    const confidenceScore = toConfidence(formData.get("confidence_score"));
+
     if (!Array.isArray(videoUrls) || videoUrls.length !== 1) redirect("/athlete/request-review?error=video_required");
 
     if (videoDurations.some((seconds) => Number(seconds) > 180)) {
@@ -116,12 +158,12 @@ export default async function AthleteRequestReviewPage({
         athlete_id: targetAthleteId,
         coach_id: resolvedCoachId,
         exercise_id: exerciseId,
-        confidence_score: Number(formData.get("confidence_score") ?? 3),
+        confidence_score: confidenceScore,
         notes: String(formData.get("notes") ?? "") || null,
         submission_video_url: String(formData.get("submission_video_url") ?? "") || null,
-        ts_top_seconds: Number(formData.get("ts_top_seconds") ?? 0) || null,
-        ts_middle_seconds: Number(formData.get("ts_middle_seconds") ?? 0) || null,
-        ts_bottom_seconds: Number(formData.get("ts_bottom_seconds") ?? 0) || null,
+        ts_top_seconds: tsTop,
+        ts_middle_seconds: tsMiddle,
+        ts_bottom_seconds: tsBottom,
         feedback_category: String(formData.get("feedback_category") ?? "") || null,
         status: "pending"
       })
@@ -151,17 +193,17 @@ export default async function AthleteRequestReviewPage({
         {
           position: 101,
           url: String(formData.get("request_photo_top") ?? "").trim(),
-          seconds: Number(formData.get("ts_top_seconds") ?? 0) || null
+          seconds: tsTop
         },
         {
           position: 102,
           url: String(formData.get("request_photo_middle") ?? "").trim(),
-          seconds: Number(formData.get("ts_middle_seconds") ?? 0) || null
+          seconds: tsMiddle
         },
         {
           position: 103,
           url: String(formData.get("request_photo_bottom") ?? "").trim(),
-          seconds: Number(formData.get("ts_bottom_seconds") ?? 0) || null
+          seconds: tsBottom
         }
       ];
       for (const row of photoRows) {
@@ -271,6 +313,7 @@ export default async function AthleteRequestReviewPage({
 
   return (
     <main className="shell space-y-4">
+      <ClearTransientQuery keys={["error"]} />
       <section className="card p-6">
         <p className="badge inline-block">Athlete - Request Review</p>
         <h1 className="text-3xl mt-3">Request Review</h1>
@@ -302,6 +345,7 @@ export default async function AthleteRequestReviewPage({
         <div className="mt-4">
           <RequestReviewForm
             exercises={exercises ?? []}
+            samplePhotosByExercise={samplePhotosByExercise}
             action={submitRequest}
           />
         </div>

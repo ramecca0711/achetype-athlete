@@ -61,34 +61,6 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
 }
 
-function toUploadErrorMessage(rawMessage: string, fileSizeBytes?: number): string {
-  const message = rawMessage.toLowerCase();
-  const isSizeError =
-    message.includes("payload too large") ||
-    message.includes("entity too large") ||
-    message.includes("exceeded") ||
-    message.includes("maximum allowed size") ||
-    message.includes("file too large") ||
-    message.includes("size limit");
-  if (isSizeError) {
-    const filePart = fileSizeBytes ? ` File size: ${formatBytes(fileSizeBytes)}.` : "";
-    return `Video duration is valid, but file size exceeds current storage upload limit.${filePart} Re-export lower resolution/bitrate or increase bucket max file size in Supabase Storage.`;
-  }
-  return rawMessage;
-}
-
-function isLikelySizeError(rawMessage: string): boolean {
-  const message = rawMessage.toLowerCase();
-  return (
-    message.includes("payload too large") ||
-    message.includes("entity too large") ||
-    message.includes("exceeded") ||
-    message.includes("maximum allowed size") ||
-    message.includes("file too large") ||
-    message.includes("size limit")
-  );
-}
-
 function isDirectVideoUrl(url: string): boolean {
   return /\.(mp4|mov|m4v|webm|ogg)(\?|$)/i.test(url) || /\/storage\/v1\/object\/public\//i.test(url);
 }
@@ -264,53 +236,21 @@ export default function ExerciseSampleUploadForm({
       const safeExt = ext.replace(/[^a-z0-9]/g, "") || "mp4";
       const path = `${actorId}/exercise-sample-${Date.now()}-${i + 1}.${safeExt}`;
       let publicUrl = "";
-      if (file.size > 45 * 1024 * 1024) {
-        try {
-          const resumable = await uploadFileResumable({
-            supabase,
-            bucket: "exercise-sample-videos",
-            path,
-            file,
-            upsert: true,
-            cacheControl: "3600"
-          });
-          publicUrl = resumable.publicUrl;
-        } catch (resumableError) {
-          setUploading(false);
-          setError((resumableError as Error).message);
-          return;
-        }
-      } else {
-        const { error: uploadError } = await supabase.storage
-          .from("exercise-sample-videos")
-          .upload(path, file, { upsert: true, cacheControl: "3600" });
-
-        if (uploadError) {
-          if (isLikelySizeError(uploadError.message)) {
-            try {
-              const resumable = await uploadFileResumable({
-                supabase,
-                bucket: "exercise-sample-videos",
-                path,
-                file,
-                upsert: true,
-                cacheControl: "3600"
-              });
-              publicUrl = resumable.publicUrl;
-            } catch (resumableError) {
-              setUploading(false);
-              setError(toUploadErrorMessage((resumableError as Error).message, file.size));
-              return;
-            }
-          } else {
-            setUploading(false);
-            setError(uploadError.message);
-            return;
-          }
-        } else {
-          const { data } = supabase.storage.from("exercise-sample-videos").getPublicUrl(path);
-          publicUrl = data.publicUrl;
-        }
+      try {
+        const resumable = await uploadFileResumable({
+          supabase,
+          bucket: "exercise-sample-videos",
+          path,
+          file,
+          upsert: true,
+          cacheControl: "3600"
+        });
+        publicUrl = resumable.publicUrl;
+      } catch (resumableError) {
+        setUploading(false);
+        const filePart = ` File size: ${formatBytes(file.size)}.`;
+        setError(`Upload failed.${filePart} ${String((resumableError as Error).message)}`);
+        return;
       }
 
       uploaded.push({ url: publicUrl, duration: Math.round(seconds), name: file.name });

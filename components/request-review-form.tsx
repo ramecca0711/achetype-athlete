@@ -21,6 +21,15 @@ type ExerciseOption = {
   exercise_group: string;
 };
 
+type ExerciseSamplePhotosByExercise = Record<
+  string,
+  {
+    top?: string;
+    middle?: string;
+    bottom?: string;
+  }
+>;
+
 type UploadedVideo = {
   url: string;
   duration: number;
@@ -31,6 +40,7 @@ type RepPhotoSlot = "top" | "middle" | "bottom";
 
 type Props = {
   exercises: ExerciseOption[];
+  samplePhotosByExercise: ExerciseSamplePhotosByExercise;
   action: (formData: FormData) => void;
 };
 
@@ -50,34 +60,6 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
 }
 
-function toUploadErrorMessage(rawMessage: string, fileSizeBytes?: number): string {
-  const message = rawMessage.toLowerCase();
-  const isSizeError =
-    message.includes("payload too large") ||
-    message.includes("entity too large") ||
-    message.includes("exceeded") ||
-    message.includes("maximum allowed size") ||
-    message.includes("file too large") ||
-    message.includes("size limit");
-  if (isSizeError) {
-    const filePart = fileSizeBytes ? ` File size: ${formatBytes(fileSizeBytes)}.` : "";
-    return `Video duration is valid, but file size exceeds current storage upload limit.${filePart} Re-export lower resolution/bitrate or increase bucket max file size in Supabase Storage.`;
-  }
-  return rawMessage;
-}
-
-function isLikelySizeError(rawMessage: string): boolean {
-  const message = rawMessage.toLowerCase();
-  return (
-    message.includes("payload too large") ||
-    message.includes("entity too large") ||
-    message.includes("exceeded") ||
-    message.includes("maximum allowed size") ||
-    message.includes("file too large") ||
-    message.includes("size limit")
-  );
-}
-
 function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
@@ -94,7 +76,31 @@ function getVideoDuration(file: File): Promise<number> {
   });
 }
 
-export default function RequestReviewForm({ exercises, action }: Props) {
+function getTimestampHref(url: string, seconds: number | null): string {
+  if (!url || seconds === null || !Number.isFinite(seconds)) return url;
+  const rounded = Math.max(0, Math.round(seconds));
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes("youtu.be")) {
+      parsed.searchParams.set("t", String(rounded));
+      return parsed.toString();
+    }
+    if (host.includes("youtube.com")) {
+      parsed.searchParams.set("t", String(rounded));
+      return parsed.toString();
+    }
+    if (host.includes("loom.com")) {
+      parsed.searchParams.set("t", String(rounded));
+      return parsed.toString();
+    }
+  } catch {
+    return `${url}#t=${rounded}`;
+  }
+  return `${url}#t=${rounded}`;
+}
+
+export default function RequestReviewForm({ exercises, samplePhotosByExercise, action }: Props) {
   const supabase = useMemo(() => createSupabaseBrowser(), []);
 
   const [files, setFiles] = useState<File[]>([]);
@@ -116,6 +122,7 @@ export default function RequestReviewForm({ exercises, action }: Props) {
     bottom: false
   });
   const [submitValidationError, setSubmitValidationError] = useState("");
+  const [selectedExerciseId, setSelectedExerciseId] = useState("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -189,52 +196,21 @@ export default function RequestReviewForm({ exercises, action }: Props) {
       const path = `${actorId}/review-${Date.now()}-${i + 1}.${safeExt}`;
 
       let publicUrl = "";
-      if (file.size > 45 * 1024 * 1024) {
-        try {
-          const resumable = await uploadFileResumable({
-            supabase,
-            bucket: "review-videos",
-            path,
-            file,
-            upsert: true,
-            cacheControl: "3600"
-          });
-          publicUrl = resumable.publicUrl;
-        } catch (resumableError) {
-          setUploading(false);
-          setError((resumableError as Error).message);
-          return;
-        }
-      } else {
-        const { error: uploadError } = await supabase.storage
-          .from("review-videos")
-          .upload(path, file, { upsert: true, cacheControl: "3600" });
-        if (uploadError) {
-          if (isLikelySizeError(uploadError.message)) {
-            try {
-              const resumable = await uploadFileResumable({
-                supabase,
-                bucket: "review-videos",
-                path,
-                file,
-                upsert: true,
-                cacheControl: "3600"
-              });
-              publicUrl = resumable.publicUrl;
-            } catch (resumableError) {
-              setUploading(false);
-              setError(toUploadErrorMessage((resumableError as Error).message, file.size));
-              return;
-            }
-          } else {
-            setUploading(false);
-            setError(uploadError.message);
-            return;
-          }
-        } else {
-          const { data } = supabase.storage.from("review-videos").getPublicUrl(path);
-          publicUrl = data.publicUrl;
-        }
+      try {
+        const resumable = await uploadFileResumable({
+          supabase,
+          bucket: "review-videos",
+          path,
+          file,
+          upsert: true,
+          cacheControl: "3600"
+        });
+        publicUrl = resumable.publicUrl;
+      } catch (resumableError) {
+        setUploading(false);
+        const filePart = ` File size: ${formatBytes(file.size)}.`;
+        setError(`Upload failed.${filePart} ${String((resumableError as Error).message)}`);
+        return;
       }
 
       uploaded.push({
@@ -474,7 +450,13 @@ export default function RequestReviewForm({ exercises, action }: Props) {
       )}
       <label className="text-sm block">
         Select Exercise
-        <select className="select mt-1" name="exercise_id" required>
+        <select
+          className="select mt-1"
+          name="exercise_id"
+          value={selectedExerciseId}
+          onChange={(event) => setSelectedExerciseId(event.target.value)}
+          required
+        >
           <option value="">Select...</option>
           {exercises.map((exercise) => (
             <option key={exercise.id} value={exercise.id}>
@@ -548,30 +530,56 @@ export default function RequestReviewForm({ exercises, action }: Props) {
           <p className="text-xs meta">
             Top: {topTs?.toFixed(1) ?? "-"}s | Middle: {middleTs?.toFixed(1) ?? "-"}s | Bottom: {bottomTs?.toFixed(1) ?? "-"}s
           </p>
-          <div className="grid md:grid-cols-3 gap-2">
+          <div className="space-y-2">
             {([
-              { key: "top", label: "Top frame", url: topPhotoUrl },
-              { key: "middle", label: "Middle frame", url: middlePhotoUrl },
-              { key: "bottom", label: "Bottom frame", url: bottomPhotoUrl }
-            ] as const).map((item) => (
-              <div key={`request-frame-${item.key}`} className="border rounded p-2 bg-slate-50">
-                <p className="text-xs meta">{item.label}</p>
-                {item.url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.url} alt={item.label} className="w-full h-24 object-contain rounded mt-1 bg-white" />
-                ) : (
-                  <div className="w-full h-24 rounded mt-1 bg-white border border-dashed flex items-center justify-center text-xs meta">
-                    Set timestamp to capture
+              { key: "top", label: "top", timestamp: topTs, requestPhoto: topPhotoUrl },
+              { key: "middle", label: "middle", timestamp: middleTs, requestPhoto: middlePhotoUrl },
+              { key: "bottom", label: "bottom", timestamp: bottomTs, requestPhoto: bottomPhotoUrl }
+            ] as const).map((item) => {
+              const samplePhoto = selectedExerciseId ? samplePhotosByExercise[selectedExerciseId]?.[item.key] : undefined;
+              const timestampHref = activeVideo?.url ? getTimestampHref(activeVideo.url, item.timestamp) : "";
+
+              return (
+                <div key={`request-compare-${item.key}`} className="grid md:grid-cols-2 gap-2">
+                  <div className="border rounded-lg p-2 bg-white">
+                    <p className="text-xs meta">Your form photo ({item.label})</p>
+                    {item.requestPhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.requestPhoto} alt={`Your form photo ${item.label}`} className="w-full h-32 object-contain rounded mt-1 bg-slate-50" />
+                    ) : (
+                      <div className="w-full h-32 rounded mt-1 bg-slate-50 border border-dashed flex items-center justify-center text-xs meta">
+                        No timestamp frame available.
+                      </div>
+                    )}
+                    {timestampHref && item.timestamp !== null && (
+                      <a href={timestampHref} target="_blank" rel="noreferrer" className="text-xs underline text-blue-700 mt-1 inline-block">
+                        Open at timestamp
+                      </a>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                  <div className="border rounded-lg p-2 bg-white">
+                    <p className="text-xs meta">Master sample photo ({item.label})</p>
+                    {samplePhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={samplePhoto} alt={`Master sample ${item.label}`} className="w-full h-32 object-contain rounded mt-1 bg-slate-50" />
+                    ) : (
+                      <div className="w-full h-32 rounded mt-1 bg-slate-50 flex items-center justify-center text-xs meta">
+                        No sample photo
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      <div className="border rounded p-3 bg-white">
-        <p className="text-sm font-semibold">Manual Screenshots (fallback)</p>
+      <details className="border rounded p-3 bg-white" open={false}>
+        <summary className="cursor-pointer list-none text-sm font-semibold flex items-center justify-between">
+          Manual Screenshots (fallback)
+          <span className="meta text-xs">v</span>
+        </summary>
         <p className="text-xs meta mt-1">Drag and drop or choose from Photos app for top/middle/bottom.</p>
         <div className="grid md:grid-cols-3 gap-2 mt-2">
           {([
@@ -611,7 +619,7 @@ export default function RequestReviewForm({ exercises, action }: Props) {
             </div>
           ))}
         </div>
-      </div>
+      </details>
 
       <label className="text-sm block">
         Feedback Category
