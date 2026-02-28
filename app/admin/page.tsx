@@ -20,7 +20,8 @@ async function assertAdmin() {
   } = await sb.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: actor } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const { data: actor } = await sb.from("profiles").select("role, approval_status").eq("id", user.id).maybeSingle();
+  if (actor?.approval_status === "pending") redirect("/pending-approval");
   if (actor?.role !== "admin") redirect("/");
 
   return { sb, user };
@@ -34,7 +35,8 @@ export default async function AdminPage() {
 
   if (!user) redirect("/login");
 
-  const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const { data: me } = await supabase.from("profiles").select("role, approval_status").eq("id", user.id).maybeSingle();
+  if (me?.approval_status === "pending") redirect("/pending-approval");
   if (me?.role !== "admin") redirect("/");
 
   async function updateRole(formData: FormData) {

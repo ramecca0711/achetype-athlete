@@ -35,6 +35,7 @@ create table if not exists public.profiles (
   email text not null unique,
   full_name text not null default 'Member',
   role app_role not null default 'athlete',
+  approval_status text not null default 'approved' check (approval_status in ('approved', 'pending', 'rejected')),
   member_since date not null default current_date,
   injuries text,
   imbalances text,
@@ -66,6 +67,7 @@ alter table public.profiles add column if not exists posture_photos_required boo
 alter table public.profiles add column if not exists training_experience text;
 alter table public.profiles add column if not exists weekly_training_days int;
 alter table public.profiles add column if not exists intro_survey_notes text;
+alter table public.profiles add column if not exists approval_status text not null default 'approved';
 alter table public.profiles add column if not exists gender text;
 alter table public.profiles add column if not exists birth_date date;
 alter table public.profiles add column if not exists age int;
@@ -360,6 +362,13 @@ begin
   update public.profiles
   set
     role = final_role,
+    approval_status = case
+      when lower(coalesce(new.raw_user_meta_data ->> 'approval_status', '')) in ('approved', 'pending', 'rejected')
+        then lower(new.raw_user_meta_data ->> 'approval_status')
+      when final_role in ('coach'::app_role, 'admin'::app_role)
+        then 'pending'
+      else 'approved'
+    end,
     gender = nullif(new.raw_user_meta_data ->> 'gender', ''),
     birth_date = case
       when (new.raw_user_meta_data ->> 'birth_date') ~ '^\d{4}-\d{2}-\d{2}$'
