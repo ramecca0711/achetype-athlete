@@ -7,6 +7,7 @@
  * - `components/right-sidebar.tsx`
  * Note: Update related files together when changing data shape or shared behavior.
  */
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -27,7 +28,11 @@ async function assertAdmin() {
   return { sb, user };
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams
+}: {
+  searchParams?: { edit_assignment?: string; deleted?: string; delete_error?: string };
+}) {
   const supabase = createSupabaseServer();
   const {
     data: { user }
@@ -73,6 +78,26 @@ export default async function AdminPage() {
     revalidatePath("/admin");
   }
 
+  async function updateAssignment(formData: FormData) {
+    "use server";
+    const { sb } = await assertAdmin();
+
+    const assignmentId = String(formData.get("assignment_id") ?? "").trim();
+    const athleteId = String(formData.get("athlete_id") ?? "").trim();
+    const coachId = String(formData.get("coach_id") ?? "").trim();
+    if (!assignmentId || !athleteId || !coachId) {
+      revalidatePath("/admin");
+      return;
+    }
+
+    await sb
+      .from("athlete_relationships")
+      .update({ athlete_id: athleteId, coach_id: coachId })
+      .eq("id", assignmentId);
+
+    redirect("/admin");
+  }
+
   async function setAdminViewContext(formData: FormData) {
     "use server";
     await assertAdmin();
@@ -98,13 +123,16 @@ export default async function AdminPage() {
 
     const profileId = String(formData.get("profile_id") ?? "").trim();
     if (!profileId) {
-      revalidatePath("/admin");
-      return;
+      redirect("/admin?delete_error=1");
     }
 
     // Delete the profile row; cascade handles related athlete_relationships rows
-    await sb.from("profiles").delete().eq("id", profileId);
-    revalidatePath("/admin");
+    const { error } = await sb.from("profiles").delete().eq("id", profileId);
+    if (error) {
+      console.error("Failed to delete profile", error);
+      redirect("/admin?delete_error=1");
+    }
+    redirect(`/admin?deleted=${profileId}`);
   }
 
   async function approveAccount(formData: FormData) {
@@ -145,7 +173,7 @@ export default async function AdminPage() {
     supabase
       .from("athlete_relationships")
       .select(
-        "id, athlete:profiles!athlete_relationships_athlete_id_fkey(full_name,email), coach:profiles!athlete_relationships_coach_id_fkey(full_name,email)"
+        "id, athlete_id, coach_id, athlete:profiles!athlete_relationships_athlete_id_fkey(full_name,email), coach:profiles!athlete_relationships_coach_id_fkey(full_name,email)"
       )
       .order("id", { ascending: false }),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "athlete"),
@@ -165,6 +193,12 @@ export default async function AdminPage() {
         <p className="badge inline-block">Admin</p>
         <h1 className="text-4xl mt-3">Platform Control</h1>
         <p className="meta mt-1">Manage roles, assignments, and admin view context.</p>
+        {searchParams?.deleted && (
+          <p className="text-green-700 text-sm mt-2">Member deleted successfully.</p>
+        )}
+        {searchParams?.delete_error && (
+          <p className="text-red-700 text-sm mt-2">Delete failed. Check policies and try again.</p>
+        )}
 
         <div className="grid md:grid-cols-3 gap-3 mt-4">
           <div className="metric"><p className="meta text-sm">Athletes</p><p className="font-semibold">{athleteCount ?? 0}</p></div>
@@ -231,10 +265,44 @@ export default async function AdminPage() {
           {(assignments ?? []).map((row: any) => {
             const athlete = Array.isArray(row.athlete) ? row.athlete[0] : row.athlete;
             const coach = Array.isArray(row.coach) ? row.coach[0] : row.coach;
+            const isEditingAssignment = searchParams?.edit_assignment === row.id;
             return (
               <div key={row.id} className="border rounded-xl p-3 bg-white">
-                <p className="text-sm"><span className="font-semibold">Athlete:</span> {athlete?.full_name ?? "-"} ({athlete?.email ?? "-"})</p>
-                <p className="text-sm"><span className="font-semibold">Coach:</span> {coach?.full_name ?? "-"} ({coach?.email ?? "-"})</p>
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="text-sm"><span className="font-semibold">Athlete:</span> {athlete?.full_name ?? "-"} ({athlete?.email ?? "-"})</p>
+                    <p className="text-sm"><span className="font-semibold">Coach:</span> {coach?.full_name ?? "-"} ({coach?.email ?? "-"})</p>
+                  </div>
+                  {isEditingAssignment ? (
+                    <Link href="/admin" className="btn btn-secondary">Cancel</Link>
+                  ) : (
+                    <Link href={`/admin?edit_assignment=${row.id}`} className="btn btn-secondary">Edit</Link>
+                  )}
+                </div>
+                {isEditingAssignment && (
+                  <form action={updateAssignment} className="grid md:grid-cols-2 gap-3 mt-3">
+                    <input type="hidden" name="assignment_id" value={row.id} />
+                    <label className="text-sm block">
+                      Athlete
+                      <select className="select mt-1" name="athlete_id" defaultValue={row.athlete_id}>
+                        {(athletes ?? []).map((a: any) => (
+                          <option key={a.id} value={a.id}>{a.full_name} ({a.email})</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-sm block">
+                      Coach
+                      <select className="select mt-1" name="coach_id" defaultValue={row.coach_id}>
+                        {(coaches ?? []).map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.full_name} ({c.email})</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="md:col-span-2">
+                      <button className="btn btn-primary" type="submit">Save Assignment</button>
+                    </div>
+                  </form>
+                )}
               </div>
             );
           })}

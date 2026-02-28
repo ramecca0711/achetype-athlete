@@ -19,8 +19,9 @@ export default async function CoachBuildProgramPage() {
 
   if (!user) redirect("/login");
 
-  const { data: me } = await supabase.from("profiles").select("role, approval_status").eq("id", user.id).maybeSingle();
+  const { data: me } = await supabase.from("profiles").select("role, approval_status, onboarding_completed").eq("id", user.id).maybeSingle();
   if (me?.approval_status === "pending") redirect("/pending-approval");
+  if (me?.role === "coach" && !me?.onboarding_completed) redirect("/coach/onboarding");
 
   if (me?.role === "admin") redirect("/admin");
   if (me?.role !== "coach") redirect("/athlete");

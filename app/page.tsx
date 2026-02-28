@@ -42,6 +42,9 @@ export default async function HomePage() {
   }
 
   if (profile?.role === "coach") {
+    if (!profile?.onboarding_completed) {
+      redirect("/coach/onboarding");
+    }
     redirect("/coach/queue");
   }
 

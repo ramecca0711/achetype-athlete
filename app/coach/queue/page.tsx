@@ -24,8 +24,9 @@ export default async function CoachQueuePage() {
 
   if (!user) redirect("/login");
 
-  const { data: me } = await supabase.from("profiles").select("role, approval_status, full_name").eq("id", user.id).maybeSingle();
+  const { data: me } = await supabase.from("profiles").select("role, approval_status, onboarding_completed, full_name").eq("id", user.id).maybeSingle();
   if (me?.approval_status === "pending") redirect("/pending-approval");
+  if (me?.role === "coach" && !me?.onboarding_completed) redirect("/coach/onboarding");
   if (me?.role !== "coach" && me?.role !== "admin") redirect("/athlete");
   const cookieStore = await cookies();
   const scopedCoachId = me?.role === "admin" ? cookieStore.get("admin_view_coach_id")?.value || "" : user.id;

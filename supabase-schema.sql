@@ -514,6 +514,11 @@ with check (
   )
 );
 
+drop policy if exists profiles_delete_admin on public.profiles;
+
+create policy profiles_delete_admin on public.profiles for delete
+using (public.is_admin(auth.uid()));
+
 drop policy if exists relationships_read on public.athlete_relationships;
 drop policy if exists relationships_insert_admin on public.athlete_relationships;
 
