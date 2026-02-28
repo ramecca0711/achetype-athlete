@@ -35,7 +35,7 @@ export default async function CoachProfilePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, full_name, email, member_since, training_experience, weekly_training_days, intro_survey_notes, gender, birth_date, age, height_inches, weight_lbs")
+    .select("id, role, full_name, email, member_since, intro_survey_notes, gender, birth_date, age")
     .eq("id", scopedCoachId)
     .maybeSingle();
 
@@ -80,14 +80,10 @@ export default async function CoachProfilePage({
       .from("profiles")
       .update({
         full_name: String(formData.get("full_name") ?? "Coach"),
-        training_experience: String(formData.get("training_experience") ?? "") || null,
-        weekly_training_days: Number(formData.get("weekly_training_days") ?? 0) || null,
         intro_survey_notes: String(formData.get("intro_survey_notes") ?? "") || null,
         gender: String(formData.get("gender") ?? "") || null,
         birth_date: birthDateRaw || null,
-        age: calculatedAge,
-        height_inches: Number(formData.get("height_inches") ?? 0) || null,
-        weight_lbs: Number(formData.get("weight_lbs") ?? 0) || null
+        age: calculatedAge
       })
       .eq("id", targetCoachId);
 
@@ -159,24 +155,12 @@ export default async function CoachProfilePage({
                   <p>Calculated age</p>
                   <p className="input mt-1 bg-slate-50">{profile?.age ?? "-"}</p>
                 </div>
-                <label className="text-sm block">Height (inches)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="height_inches" defaultValue={profile?.height_inches ?? ""} />
-                </label>
-                <label className="text-sm block">Weight (lbs)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="weight_lbs" defaultValue={profile?.weight_lbs ?? ""} />
-                </label>
               </div>
             </section>
 
             <section className="border rounded-xl p-4 bg-white">
               <h2 className="text-xl">Coaching Profile</h2>
               <div className="grid md:grid-cols-2 gap-3 mt-3">
-                <label className="text-sm block">Training Experience
-                  <input className="input mt-1" name="training_experience" defaultValue={profile?.training_experience ?? ""} />
-                </label>
-                <label className="text-sm block">Weekly Training Days
-                  <input className="input mt-1" type="number" min={1} max={7} name="weekly_training_days" defaultValue={profile?.weekly_training_days ?? ""} />
-                </label>
                 <label className="text-sm block md:col-span-2">Setup Notes
                   <textarea className="textarea mt-1" name="intro_survey_notes" defaultValue={profile?.intro_survey_notes ?? ""} />
                 </label>
@@ -197,16 +181,12 @@ export default async function CoachProfilePage({
                 <p><span className="meta">Gender:</span> {profile?.gender ?? "-"}</p>
                 <p><span className="meta">Birthday:</span> {profile?.birth_date ?? "-"}</p>
                 <p><span className="meta">Age:</span> {profile?.age ?? "-"}</p>
-                <p><span className="meta">Height:</span> {profile?.height_inches ?? "-"} in</p>
-                <p><span className="meta">Weight:</span> {profile?.weight_lbs ?? "-"} lbs</p>
               </div>
             </section>
 
             <section className="border rounded-xl p-4 bg-white">
               <h2 className="text-xl">Coaching Profile</h2>
               <div className="space-y-2 mt-3 text-sm">
-                <p><span className="meta">Training experience:</span> {profile?.training_experience ?? "-"}</p>
-                <p><span className="meta">Days/week:</span> {profile?.weekly_training_days ?? "-"}</p>
                 <p><span className="meta">Setup notes:</span> {profile?.intro_survey_notes ?? "-"}</p>
               </div>
             </section>
