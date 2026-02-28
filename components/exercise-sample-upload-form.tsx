@@ -158,6 +158,7 @@ export default function ExerciseSampleUploadForm({
   const [error, setError] = useState("");
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
   const [loadedLinkUrl, setLoadedLinkUrl] = useState(initialSource === "link" ? trimmedInitialVideoUrl : "");
+  const [loadedLinkKey, setLoadedLinkKey] = useState(0);
 
   const [cursor, setCursor] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -298,6 +299,10 @@ export default function ExerciseSampleUploadForm({
     }
     if (videoSource === "link" && loadedLinkYouTubeId && youtubePlayerRef.current?.seekTo) {
       youtubePlayerRef.current.seekTo(value, true);
+      window.setTimeout(() => {
+        const current = Number(youtubePlayerRef.current?.getCurrentTime?.() || value);
+        if (Number.isFinite(current)) setCursor(current);
+      }, 80);
     }
   }
 
@@ -316,6 +321,7 @@ export default function ExerciseSampleUploadForm({
     }
 
     setLoadedLinkUrl(url);
+    setLoadedLinkKey((prev) => prev + 1);
     setCursor(0);
     setDuration(0);
     setTopTs(null);
@@ -511,6 +517,8 @@ export default function ExerciseSampleUploadForm({
             const d = Number(event?.target?.getDuration?.() || 0);
             if (d > 0) setDuration(d);
             setYoutubeReady(true);
+            const current = Number(event?.target?.getCurrentTime?.() || 0);
+            if (Number.isFinite(current)) setCursor(current);
           },
           onStateChange: () => {
             // Time sync is polled while player is ready.
@@ -541,7 +549,7 @@ export default function ExerciseSampleUploadForm({
       youtubePlayerRef.current = null;
       setYoutubeReady(false);
     };
-  }, [loadedLinkYouTubeId, videoSource]);
+  }, [loadedLinkYouTubeId, videoSource, loadedLinkKey]);
 
   useEffect(() => {
     if (videoSource !== "link" || !loadedLinkYouTubeId || !youtubeReady) return;
@@ -566,6 +574,11 @@ export default function ExerciseSampleUploadForm({
   }
 
   function setTimestampFromLiveCursor(slot: RepPhotoSlot) {
+    if (videoSource === "link" && loadedLinkYouTubeId && !youtubeReady) {
+      setError("YouTube player is still loading. Try again in a second.");
+      return;
+    }
+    setError("");
     const seconds = getLiveCursorSeconds();
     if (slot === "top") setTopTs(seconds);
     if (slot === "middle") setMiddleTs(seconds);
