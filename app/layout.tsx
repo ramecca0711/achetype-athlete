@@ -8,28 +8,10 @@
  * Note: Update related files together when changing data shape or shared behavior.
  */
 import type { Metadata } from "next";
-// Oswald replaces Abril Fatface — angular, condensed, sporty (no curly serifs)
-import { Oswald, Poppins } from "next/font/google";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types";
 import "./globals.css";
 import RightSidebar from "@/components/right-sidebar";
-
-// Oswald 600: condensed, angular sans-serif — sporty, no decorative serifs
-const oswald = Oswald({
-  weight: ["600"],
-  subsets: ["latin"],
-  variable: "--font-heading",
-  display: "swap"
-});
-
-// Poppins: clean geometric sans-serif for body and UI text
-const poppins = Poppins({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
-  variable: "--font-body",
-  display: "swap"
-});
 
 export const metadata: Metadata = {
   title: "Archetype Athlete Portal",
@@ -64,7 +46,7 @@ export default async function RootLayout({
   const auth = await getAuthSummary();
 
   return (
-    <html lang="en" className={`${oswald.variable} ${poppins.variable}`}>
+    <html lang="en" >
       <body>
         <div className="app-shell">
           <div className="app-main">{children}</div>
