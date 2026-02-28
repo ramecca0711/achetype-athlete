@@ -513,11 +513,6 @@ export default function ExerciseSampleUploadForm({
   const activeVideo = uploadedVideos[selectedVideoIndex];
   const loadedLinkEmbedUrl = useMemo(() => toEmbedUrl(loadedLinkUrl), [loadedLinkUrl]);
   const loadedLinkYouTubeId = useMemo(() => parseYouTubeId(loadedLinkUrl), [loadedLinkUrl]);
-  const selectedExercise = useMemo(
-    () => exercises.find((exercise) => exercise.id === selectedExerciseId),
-    [exercises, selectedExerciseId]
-  );
-
   useEffect(() => {
     if (!loadedLinkYouTubeId || videoSource !== "link") return;
     const start = () => {
@@ -620,26 +615,6 @@ export default function ExerciseSampleUploadForm({
           </select>
         </label>
       ) : null}
-
-      {!hideExerciseSelect && selectedExercise && (
-        <details className="md:col-span-2 border rounded p-3 bg-white" open={false}>
-          <summary className="cursor-pointer list-none text-sm font-semibold">
-            Exercise Database Info
-          </summary>
-          <div className="mt-2 space-y-1 text-sm">
-            <p><span className="meta">Name:</span> {selectedExercise.name}</p>
-            <p><span className="meta">Category:</span> {selectedExercise.category ?? "-"}</p>
-            <p><span className="meta">Group:</span> {selectedExercise.exercise_group ?? "-"}</p>
-            <p><span className="meta">Subgroup:</span> {selectedExercise.exercise_subgroup ?? "-"}</p>
-            <p><span className="meta">Structural goal:</span> {selectedExercise.structural_goal ?? "-"}</p>
-            <p><span className="meta">Cues:</span> {selectedExercise.cues ?? "-"}</p>
-            <p><span className="meta">Purpose/Impact:</span> {selectedExercise.purpose_impact ?? "-"}</p>
-            <p><span className="meta">Where to feel:</span> {selectedExercise.where_to_feel ?? "-"}</p>
-            <p><span className="meta">Do:</span> {selectedExercise.dos_examples ?? "-"}</p>
-            <p><span className="meta">Don&apos;t:</span> {selectedExercise.donts_examples ?? "-"}</p>
-          </div>
-        </details>
-      )}
 
       <div className="md:col-span-2 border rounded p-3 bg-white">
         <p className="text-sm font-semibold">Sample Video Source (1 file or 1 link)</p>

@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import ExerciseSampleUploadForm from "@/components/exercise-sample-upload-form";
+import DetailsEditToggle from "@/components/details-edit-toggle";
 import TimestampFramePreview from "@/components/timestamp-frame-preview";
 import { generateTimestampScreenshots } from "@/lib/video-screenshots";
 
@@ -499,7 +500,7 @@ export default async function CoachExercisesPage({
     );
   }
 
-  async function updateExercise(formData: FormData) {
+  async function saveExerciseAndSample(formData: FormData) {
     "use server";
     const sb = createSupabaseServer();
     const {
@@ -507,11 +508,14 @@ export default async function CoachExercisesPage({
     } = await sb.auth.getUser();
     if (!actionUser) redirect("/login");
     const { data: actionMe } = await sb.from("profiles").select("role").eq("id", actionUser.id).maybeSingle();
+    const actionCookies = await cookies();
+    const targetCoachId =
+      actionMe?.role === "admin" ? actionCookies.get("admin_view_coach_id")?.value || "" : actionUser.id;
+    if (!targetCoachId) redirect("/admin");
     if (actionMe?.role !== "coach" && actionMe?.role !== "admin") redirect("/");
 
     const exerciseId = String(formData.get("exercise_id") ?? "").trim();
     if (!exerciseId) redirect("/coach/exercises");
-    const closeAfterSave = String(formData.get("close_after_save") ?? "") === "1";
 
     const { data: updatedRows, error: updateError } = await sb
       .from("exercises")
@@ -534,7 +538,187 @@ export default async function CoachExercisesPage({
       redirect(`/coach/exercises?edit=${exerciseId}&update_error=save_failed`);
     }
 
-    redirect(closeAfterSave ? `/coach/exercises?updated=${exerciseId}` : `/coach/exercises?edit=${exerciseId}&updated=${exerciseId}`);
+    const sampleUrls = JSON.parse(String(formData.get("sample_video_urls") ?? "[]")) as string[];
+    const sampleDurations = JSON.parse(String(formData.get("sample_video_durations") ?? "[]")) as number[];
+    const videoSource = String(formData.get("video_source") ?? "").trim();
+
+    const normalizeSeconds = (value: FormDataEntryValue | null): number | null => {
+      const raw = String(value ?? "").trim();
+      if (!raw) return null;
+      const num = Number(raw);
+      if (!Number.isFinite(num) || num < 0) return null;
+      return Math.round(num);
+    };
+
+    if (!Array.isArray(sampleUrls) || sampleUrls.length !== 1) {
+      redirect(`/coach/exercises?edit=${exerciseId}&sample_error=missing_video`);
+    }
+
+    if (sampleDurations.some((seconds) => Number(seconds) > 180)) {
+      redirect(`/coach/exercises?edit=${exerciseId}&sample_error=duration_limit`);
+    }
+
+    const { data: latestExisting } = await sb
+      .from("exercise_reference_videos")
+      .select("loom_url, ts_top_seconds, ts_middle_seconds, ts_bottom_seconds")
+      .eq("coach_id", targetCoachId)
+      .eq("exercise_id", exerciseId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const submittedTop = normalizeSeconds(formData.get("ts_top_seconds"));
+    const submittedMiddle = normalizeSeconds(formData.get("ts_middle_seconds"));
+    const submittedBottom = normalizeSeconds(formData.get("ts_bottom_seconds"));
+    const resolvedTop = submittedTop ?? latestExisting?.ts_top_seconds ?? null;
+    const resolvedMiddle = submittedMiddle ?? latestExisting?.ts_middle_seconds ?? null;
+    const resolvedBottom = submittedBottom ?? latestExisting?.ts_bottom_seconds ?? null;
+    const resolvedLoomUrl = String(formData.get("loom_url") ?? "").trim() || latestExisting?.loom_url || "";
+
+    let referenceId = "";
+    const { data: existingReference } = await sb
+      .from("exercise_reference_videos")
+      .select("id")
+      .eq("coach_id", targetCoachId)
+      .eq("exercise_id", exerciseId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingReference?.id) {
+      const { error: referenceUpdateError } = await sb
+        .from("exercise_reference_videos")
+        .update({
+          loom_url: resolvedLoomUrl,
+          audience: "all",
+          feedback_category: null,
+          cue_notes: null,
+          ts_top_seconds: resolvedTop,
+          ts_middle_seconds: resolvedMiddle,
+          ts_bottom_seconds: resolvedBottom
+        })
+        .eq("id", existingReference.id);
+      if (referenceUpdateError) {
+        redirect(`/coach/exercises?edit=${exerciseId}&sample_error=reference_insert_failed`);
+      }
+      referenceId = existingReference.id;
+    } else {
+      const { data: insertedReference, error: referenceInsertError } = await sb
+        .from("exercise_reference_videos")
+        .insert({
+          exercise_id: exerciseId,
+          coach_id: targetCoachId,
+          loom_url: resolvedLoomUrl,
+          audience: "all",
+          feedback_category: null,
+          cue_notes: null,
+          ts_top_seconds: resolvedTop,
+          ts_middle_seconds: resolvedMiddle,
+          ts_bottom_seconds: resolvedBottom
+        })
+        .select("id")
+        .single();
+      if (referenceInsertError || !insertedReference?.id) {
+        redirect(`/coach/exercises?edit=${exerciseId}&sample_error=reference_insert_failed`);
+      }
+      referenceId = insertedReference.id;
+    }
+
+    const duration = Number(sampleDurations[0] ?? 0) || null;
+    const { data: existingAsset } = await sb
+      .from("exercise_reference_video_assets")
+      .select("id")
+      .eq("reference_video_id", referenceId)
+      .eq("position", 1)
+      .limit(1)
+      .maybeSingle();
+    if (existingAsset?.id) {
+      const { error: assetUpdateError } = await sb
+        .from("exercise_reference_video_assets")
+        .update({
+          video_url: sampleUrls[0],
+          duration_seconds: duration
+        })
+        .eq("id", existingAsset.id);
+      if (assetUpdateError) {
+        redirect(`/coach/exercises?edit=${exerciseId}&sample_error=asset_insert_failed`);
+      }
+    } else {
+      const { error: assetInsertError } = await sb.from("exercise_reference_video_assets").insert({
+        reference_video_id: referenceId,
+        video_url: sampleUrls[0],
+        duration_seconds: duration,
+        position: 1
+      });
+      if (assetInsertError) {
+        redirect(`/coach/exercises?edit=${exerciseId}&sample_error=asset_insert_failed`);
+      }
+    }
+
+    let generatedPhotoUrls: Partial<Record<"top" | "middle" | "bottom", string>> = {};
+    let frameCaptureWarning = "";
+    if (videoSource === "link" && sampleUrls[0]) {
+      try {
+        const frameBuffers = await generateTimestampScreenshots(sampleUrls[0], {
+          top: resolvedTop,
+          middle: resolvedMiddle,
+          bottom: resolvedBottom
+        });
+        for (const slot of ["top", "middle", "bottom"] as const) {
+          const frame = frameBuffers[slot];
+          if (!frame) continue;
+          const path = `${actionUser.id}/exercise-rep-${exerciseId}-${slot}-${Date.now()}.jpg`;
+          const { error: frameUploadError } = await sb.storage
+            .from("exercise-sample-videos")
+            .upload(path, frame, { upsert: true, cacheControl: "3600", contentType: "image/jpeg" });
+          if (frameUploadError) continue;
+          const { data: framePublic } = sb.storage.from("exercise-sample-videos").getPublicUrl(path);
+          generatedPhotoUrls[slot] = framePublic.publicUrl;
+        }
+      } catch (error) {
+        frameCaptureWarning = error instanceof Error ? error.message.slice(0, 120) : "frame_capture_failed";
+      }
+    }
+
+    const positions = ["top", "middle", "bottom"] as const;
+    for (const pos of positions) {
+      const url = String(formData.get(`photo_${pos}`) ?? "").trim() || generatedPhotoUrls[pos] || "";
+      if (!url) continue;
+      const { data: existingPhoto } = await sb
+        .from("exercise_rep_photos")
+        .select("id")
+        .eq("exercise_id", exerciseId)
+        .eq("photo_position", pos)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingPhoto?.id) {
+        const { error: photoUpdateError } = await sb
+          .from("exercise_rep_photos")
+          .update({ image_url: url })
+          .eq("id", existingPhoto.id);
+        if (photoUpdateError) {
+          redirect(`/coach/exercises?edit=${exerciseId}&sample_error=rep_photo_failed`);
+        }
+      } else {
+        const { error: photoInsertError } = await sb.from("exercise_rep_photos").insert({
+          exercise_id: exerciseId,
+          photo_position: pos,
+          image_url: url
+        });
+        if (photoInsertError) {
+          redirect(`/coach/exercises?edit=${exerciseId}&sample_error=rep_photo_failed`);
+        }
+      }
+    }
+
+    redirect(
+      `/coach/exercises?edit=${exerciseId}&updated=${exerciseId}&sample_saved=1&sample_saved_for=${exerciseId}${
+        frameCaptureWarning
+          ? `&sample_warning=frame_capture_unavailable&sample_debug=${encodeURIComponent(frameCaptureWarning)}`
+          : ""
+      }`
+    );
   }
 
   async function deleteExercise(formData: FormData) {
@@ -768,8 +952,9 @@ export default async function CoachExercisesPage({
               <div className="space-y-2">
                 {(groupedFiltered[group] ?? []).map((exercise) => {
             const isEditing = currentEditId === exercise.id;
+            const detailsId = `exercise-details-${exercise.id}`;
             return (
-            <details key={exercise.id} className="metric p-3" open={isEditing}>
+            <details id={detailsId} key={exercise.id} className="metric p-3" open={isEditing}>
               <summary className="cursor-pointer list-none">
               {(() => {
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];
@@ -807,12 +992,7 @@ export default async function CoachExercisesPage({
                             🗑️
                           </button>
                         </form>
-                        <a
-                          href={isEditing ? "/coach/exercises" : `/coach/exercises?edit=${exercise.id}`}
-                          className="badge"
-                        >
-                          {isEditing ? "Close" : "Edit"}
-                        </a>
+                        <DetailsEditToggle detailsId={detailsId} initiallyOpen={isEditing} />
                       </div>
                     </div>
                     {!!missingFields.length && (
@@ -832,7 +1012,7 @@ export default async function CoachExercisesPage({
               {(() => {
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];
                 const latestVideo = exerciseVideos[0];
-                const infoRows = [
+                const leftInfoRows = [
                   { label: "Name", value: exercise.name, missing: !exercise.name },
                   { label: "Category", value: exercise.category, missing: !exercise.category },
                   { label: "Group/type", value: exercise.exercise_group, missing: !exercise.exercise_group || exercise.exercise_group === "Needs Setup" },
@@ -842,7 +1022,9 @@ export default async function CoachExercisesPage({
                   { label: "Purpose/impact", value: exercise.purpose_impact, missing: !exercise.purpose_impact },
                   { label: "Where to feel", value: exercise.where_to_feel, missing: !exercise.where_to_feel },
                   { label: "Do examples", value: exercise.dos_examples, missing: !exercise.dos_examples },
-                  { label: "Don't examples", value: exercise.donts_examples, missing: !exercise.donts_examples },
+                  { label: "Don't examples", value: exercise.donts_examples, missing: !exercise.donts_examples }
+                ];
+                const rightInfoRows = [
                   { label: "Sample video", value: latestVideo?.loom_url ?? null, missing: exerciseVideos.length === 0 },
                   { label: "Top timestamp", value: latestVideo?.ts_top_seconds != null ? `${latestVideo.ts_top_seconds}s` : null, missing: exerciseVideos.length > 0 && latestVideo?.ts_top_seconds == null },
                   { label: "Middle timestamp", value: latestVideo?.ts_middle_seconds != null ? `${latestVideo.ts_middle_seconds}s` : null, missing: exerciseVideos.length > 0 && latestVideo?.ts_middle_seconds == null },
@@ -850,21 +1032,39 @@ export default async function CoachExercisesPage({
                 ];
 
                 return (
-                  <div className="grid md:grid-cols-2 gap-2 text-sm">
-                    {infoRows.map((row) => {
-                      const isMissingValue =
-                        row.missing || row.value === null || row.value === undefined || String(row.value).trim() === "";
-                      return (
-                        <p key={`${exercise.id}-${row.label}`} className="text-slate-800">
-                          <span className="meta">{row.label}:</span>{" "}
-                          {isMissingValue ? (
-                            <span className="text-red-700 font-medium">Missing</span>
-                          ) : (
-                            row.value
-                          )}
-                        </p>
-                      );
-                    })}
+                  <div className="grid md:grid-cols-2 gap-3 text-sm">
+                    <div className="space-y-2">
+                      {leftInfoRows.map((row) => {
+                        const isMissingValue =
+                          row.missing || row.value === null || row.value === undefined || String(row.value).trim() === "";
+                        return (
+                          <p key={`${exercise.id}-left-${row.label}`} className="text-slate-800">
+                            <span className="meta">{row.label}:</span>{" "}
+                            {isMissingValue ? (
+                              <span className="text-red-700 font-medium">Missing</span>
+                            ) : (
+                              row.value
+                            )}
+                          </p>
+                        );
+                      })}
+                    </div>
+                    <div className="space-y-2">
+                      {rightInfoRows.map((row) => {
+                        const isMissingValue =
+                          row.missing || row.value === null || row.value === undefined || String(row.value).trim() === "";
+                        return (
+                          <p key={`${exercise.id}-right-${row.label}`} className="text-slate-800">
+                            <span className="meta">{row.label}:</span>{" "}
+                            {isMissingValue ? (
+                              <span className="text-red-700 font-medium">Missing</span>
+                            ) : (
+                              row.value
+                            )}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()}
@@ -976,7 +1176,7 @@ export default async function CoachExercisesPage({
                         "unexpected error."}
                     </p>
                   )}
-                  <form action={updateExercise} className="grid md:grid-cols-2 gap-2">
+                  <form action={saveExerciseAndSample} className="grid md:grid-cols-2 gap-2">
                     <input type="hidden" name="exercise_id" value={exercise.id} />
                     <label className="text-sm block">Exercise name
                       <input className="input mt-1" name="name" defaultValue={exercise.name} required />
@@ -1008,13 +1208,6 @@ export default async function CoachExercisesPage({
                     <label className="text-sm block md:col-span-2">Don&apos;t examples
                       <textarea className="textarea mt-1" name="donts_examples" defaultValue={exercise.donts_examples ?? ""} />
                     </label>
-                    <div className="md:col-span-2 flex gap-2 flex-wrap">
-                      <button className="btn btn-secondary" type="submit">Save Exercise Details</button>
-                      <button className="btn btn-secondary" type="submit" name="close_after_save" value="1">Save + Close</button>
-                    </div>
-                  </form>
-
-                  <div>
                     <h3 className="text-base font-semibold">Sample Video Source (1 file or 1 link)</h3>
                     {(() => {
                       const latestVideo = (videosByExercise.get(exercise.id) ?? [])[0];
@@ -1039,10 +1232,14 @@ export default async function CoachExercisesPage({
                         donts_examples: item.donts_examples
                       }))}
                       action={addReferenceVideo}
+                      embeddedInParentForm
+                      hideExerciseSelect
+                      showSubmitButton={false}
                     />
                       );
                     })()}
-                  </div>
+                    <button className="btn btn-secondary md:col-span-2" type="submit">Save Sample</button>
+                  </form>
                 </div>
               )}
               </div>
