@@ -65,13 +65,13 @@ export default async function RootLayout({
     <html lang="en" >
       <body>
         <div className="app-shell">
-          <div className="app-main">{children}</div>
           <RightSidebar
             role={auth.role}
             email={auth.email}
             adminCoachContextId={auth.adminCoachContextId}
             adminAthleteContextId={auth.adminAthleteContextId}
           />
+          <div className="app-main">{children}</div>
         </div>
       </body>
     </html>

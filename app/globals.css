@@ -77,7 +77,7 @@ h4 {
   width: 250px;
   /* Dark background matching the Gunther Klaus dark sections */
   background: #1a1a1a;
-  border-left: 1px solid #2e2e2e;
+  border-right: 1px solid #2e2e2e;
   padding: 0.75rem;
   position: sticky;
   top: 0;
@@ -404,7 +404,7 @@ details[open] > summary::after {
     width: 100%;
     height: auto;
     position: static;
-    border-left: 0;
+    border-right: 0;
     border-top: 1px solid #2e2e2e;
   }
 
