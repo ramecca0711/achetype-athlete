@@ -30,8 +30,7 @@ export default function LoginPage() {
   const [coaches, setCoaches] = useState<CoachOption[]>([]);
   const [signupCoachId, setSignupCoachId] = useState("");
   const [signupGender, setSignupGender] = useState("");
-  const [signupBirthDate, setSignupBirthDate] = useState("");
-  const [signupHeightInches, setSignupHeightInches] = useState("");
+  // Birthday and height are collected post-signup during onboarding
   const [signupWeightLbs, setSignupWeightLbs] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -101,19 +100,7 @@ export default function LoginPage() {
                   role: signupRole,
                   coach_id: signupRole === "athlete" ? signupCoachId : null,
                   gender: signupGender || null,
-                  birth_date: signupBirthDate || null,
-                  age: signupBirthDate
-                    ? Math.max(
-                        0,
-                        new Date().getFullYear() - new Date(signupBirthDate).getFullYear() -
-                          (new Date().getMonth() < new Date(signupBirthDate).getMonth() ||
-                          (new Date().getMonth() === new Date(signupBirthDate).getMonth() &&
-                            new Date().getDate() < new Date(signupBirthDate).getDate())
-                            ? 1
-                            : 0)
-                      )
-                    : null,
-                  height_inches: signupHeightInches || null,
+                  // Birthday, age, and height are collected during onboarding after account creation
                   weight_lbs: signupWeightLbs || null
                 }
               }
@@ -238,48 +225,6 @@ export default function LoginPage() {
                   <option value="non_binary">Non-binary</option>
                   <option value="prefer_not_to_say">Prefer not to say</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium" htmlFor="signup-birthdate">
-                  Birthday
-                </label>
-                <input
-                  className="input mt-1"
-                  id="signup-birthdate"
-                  type="date"
-                  value={signupBirthDate}
-                  onChange={(event) => setSignupBirthDate(event.target.value)}
-                />
-                {signupBirthDate && (
-                  <p className="meta text-xs mt-1">
-                    Age:{" "}
-                    {Math.max(
-                      0,
-                      new Date().getFullYear() - new Date(signupBirthDate).getFullYear() -
-                        (new Date().getMonth() < new Date(signupBirthDate).getMonth() ||
-                        (new Date().getMonth() === new Date(signupBirthDate).getMonth() &&
-                          new Date().getDate() < new Date(signupBirthDate).getDate())
-                          ? 1
-                          : 0)
-                    )}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium" htmlFor="signup-height">
-                  Height (inches)
-                </label>
-                <input
-                  className="input mt-1"
-                  id="signup-height"
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  value={signupHeightInches}
-                  onChange={(event) => setSignupHeightInches(event.target.value)}
-                />
               </div>
 
               <div>
