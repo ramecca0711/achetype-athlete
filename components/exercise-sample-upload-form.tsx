@@ -71,21 +71,6 @@ function formatClock(value: number | null | undefined): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function parseClockInput(input: string): number | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  if (/^\d+:\d{1,2}$/.test(trimmed)) {
-    const [m, s] = trimmed.split(":");
-    const minutes = Number(m);
-    const seconds = Number(s);
-    if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || seconds >= 60) return null;
-    return Math.max(0, minutes * 60 + seconds);
-  }
-  const asSeconds = Number(trimmed);
-  if (!Number.isFinite(asSeconds) || asSeconds < 0) return null;
-  return asSeconds;
-}
-
 function isDirectVideoUrl(url: string): boolean {
   return /\.(mp4|mov|m4v|webm|ogg)(\?|$)/i.test(url) || /\/storage\/v1\/object\/public\//i.test(url);
 }
@@ -183,7 +168,6 @@ export default function ExerciseSampleUploadForm({
   const [loadedLinkKey, setLoadedLinkKey] = useState(0);
 
   const [cursor, setCursor] = useState(0);
-  const [typedTime, setTypedTime] = useState("");
   const [duration, setDuration] = useState(0);
   const [topTs, setTopTs] = useState<number | null>(initialTopTs);
   const [middleTs, setMiddleTs] = useState<number | null>(initialMiddleTs);
@@ -327,10 +311,6 @@ export default function ExerciseSampleUploadForm({
         if (Number.isFinite(current)) setCursor(current);
       }, 80);
     }
-  }
-
-  function getTypedSeconds(): number | null {
-    return parseClockInput(typedTime);
   }
 
   function loadLinkVideo() {
@@ -619,20 +599,6 @@ export default function ExerciseSampleUploadForm({
     if (slot === "bottom") setBottomTs(seconds);
   }
 
-  function setTimestampFromTyped(slot: RepPhotoSlot) {
-    const parsed = getTypedSeconds();
-    if (parsed === null) {
-      setError("Enter time as m:ss (example 1:23) or seconds.");
-      return;
-    }
-    setError("");
-    setCursor(parsed);
-    onScrub(parsed);
-    if (slot === "top") setTopTs(parsed);
-    if (slot === "middle") setMiddleTs(parsed);
-    if (slot === "bottom") setBottomTs(parsed);
-  }
-
   const formContent = (
     <>
       {fixedExerciseId ? (
@@ -796,28 +762,18 @@ export default function ExerciseSampleUploadForm({
               onChange={(event) => onScrub(Number(event.target.value))}
             />
           </label>
-          <div className="flex gap-2 items-end flex-wrap">
-            <label className="text-xs">
-              Type time (m:ss or seconds)
-              <input
-                className="input mt-1 w-44"
-                value={typedTime}
-                onChange={(event) => setTypedTime(event.target.value)}
-                placeholder="1:23"
-              />
-            </label>
-          </div>
           {renderTimestampMarkers()}
-          <div className="flex gap-2 flex-wrap">
-            <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("top")}>Set Top</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromTyped("top")}>Set Top (typed)</button>
-            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(topTs)} disabled={topTs == null}>Go Top</button>
-            <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("middle")}>Set Middle</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromTyped("middle")}>Set Middle (typed)</button>
-            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(middleTs)} disabled={middleTs == null}>Go Middle</button>
-            <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("bottom")}>Set Bottom</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromTyped("bottom")}>Set Bottom (typed)</button>
-            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(bottomTs)} disabled={bottomTs == null}>Go Bottom</button>
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("top")}>Set Top</button>
+              <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("middle")}>Set Middle</button>
+              <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("bottom")}>Set Bottom</button>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(topTs)} disabled={topTs == null}>Go Top</button>
+              <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(middleTs)} disabled={middleTs == null}>Go Middle</button>
+              <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(bottomTs)} disabled={bottomTs == null}>Go Bottom</button>
+            </div>
           </div>
           <p className="text-xs meta">Top: {topTs == null ? "-" : formatClock(topTs)} | Middle: {middleTs == null ? "-" : formatClock(middleTs)} | Bottom: {bottomTs == null ? "-" : formatClock(bottomTs)}</p>
         </div>
@@ -860,28 +816,18 @@ export default function ExerciseSampleUploadForm({
               onChange={(event) => onScrub(Number(event.target.value))}
             />
           </label>
-          <div className="flex gap-2 items-end flex-wrap">
-            <label className="text-xs">
-              Type time (m:ss or seconds)
-              <input
-                className="input mt-1 w-44"
-                value={typedTime}
-                onChange={(event) => setTypedTime(event.target.value)}
-                placeholder="1:23"
-              />
-            </label>
-          </div>
           {renderTimestampMarkers()}
-          <div className="flex gap-2 flex-wrap">
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("top")}>Set Top</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromTyped("top")}>Set Top (typed)</button>
-            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(topTs)} disabled={topTs == null}>Go Top</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("middle")}>Set Middle</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromTyped("middle")}>Set Middle (typed)</button>
-            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(middleTs)} disabled={middleTs == null}>Go Middle</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("bottom")}>Set Bottom</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromTyped("bottom")}>Set Bottom (typed)</button>
-            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(bottomTs)} disabled={bottomTs == null}>Go Bottom</button>
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("top")}>Set Top</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("middle")}>Set Middle</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("bottom")}>Set Bottom</button>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(topTs)} disabled={topTs == null}>Go Top</button>
+              <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(middleTs)} disabled={middleTs == null}>Go Middle</button>
+              <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(bottomTs)} disabled={bottomTs == null}>Go Bottom</button>
+            </div>
           </div>
           <p className="text-xs meta">Top: {topTs == null ? "-" : formatClock(topTs)} | Middle: {middleTs == null ? "-" : formatClock(middleTs)} | Bottom: {bottomTs == null ? "-" : formatClock(bottomTs)}</p>
         </div>
