@@ -126,8 +126,9 @@ export default async function AdminPage({
       redirect("/admin?delete_error=1");
     }
 
-    // Delete the profile row; cascade handles related athlete_relationships rows
-    const { error } = await sb.from("profiles").delete().eq("id", profileId);
+    // Delete from auth.users via SECURITY DEFINER RPC so the email is fully released.
+    // This cascades to public.profiles through FK.
+    const { error } = await sb.rpc("admin_delete_user", { target_user_id: profileId });
     if (error) {
       console.error("Failed to delete profile", error);
       redirect("/admin?delete_error=1");

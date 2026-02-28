@@ -434,6 +434,34 @@ $$;
 
 grant execute on function public.is_admin(uuid) to authenticated;
 
+create or replace function public.admin_delete_user(target_user_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or not public.is_admin(auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+
+  if target_user_id is null then
+    raise exception 'target_user_id is required';
+  end if;
+
+  if target_user_id = auth.uid() then
+    raise exception 'cannot delete your own admin account';
+  end if;
+
+  -- Delete from auth.users so email is fully released for future signup.
+  -- public.profiles cascades via FK (profiles.id -> auth.users.id).
+  delete from auth.users where id = target_user_id;
+  return true;
+end;
+$$;
+
+grant execute on function public.admin_delete_user(uuid) to authenticated;
+
 create or replace view public.coach_review_queue as
 select
   s.id as submission_id,
