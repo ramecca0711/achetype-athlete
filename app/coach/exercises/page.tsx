@@ -101,10 +101,190 @@ export default async function CoachExercisesPage({
       .limit(1)
       .maybeSingle();
 
+    let exerciseId = "";
     if (existing?.id) {
       await sb.from("exercises").update(payload).eq("id", existing.id);
+      exerciseId = existing.id;
     } else {
-      await sb.from("exercises").insert(payload);
+      const { data: inserted } = await sb.from("exercises").insert(payload).select("id").single();
+      exerciseId = inserted?.id ?? "";
+    }
+
+    const sampleUrls = JSON.parse(String(formData.get("sample_video_urls") ?? "[]")) as string[];
+    const sampleDurations = JSON.parse(String(formData.get("sample_video_durations") ?? "[]")) as number[];
+    const videoSource = String(formData.get("video_source") ?? "").trim();
+    const hasSample = Array.isArray(sampleUrls) && sampleUrls.length === 1 && Boolean(sampleUrls[0]);
+
+    const normalizeSeconds = (value: FormDataEntryValue | null): number | null => {
+      const num = Number(String(value ?? "").trim());
+      if (!Number.isFinite(num) || num < 0) return null;
+      return Math.round(num);
+    };
+
+    if (exerciseId && hasSample) {
+      if (sampleDurations.some((seconds) => Number(seconds) > 180)) {
+        redirect("/coach/exercises?sample_error=duration_limit");
+      }
+
+      const { data: latestExisting } = await sb
+        .from("exercise_reference_videos")
+        .select("loom_url, ts_top_seconds, ts_middle_seconds, ts_bottom_seconds")
+        .eq("coach_id", targetCoachId)
+        .eq("exercise_id", exerciseId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const submittedTop = normalizeSeconds(formData.get("ts_top_seconds"));
+      const submittedMiddle = normalizeSeconds(formData.get("ts_middle_seconds"));
+      const submittedBottom = normalizeSeconds(formData.get("ts_bottom_seconds"));
+      const resolvedTop = submittedTop ?? latestExisting?.ts_top_seconds ?? null;
+      const resolvedMiddle = submittedMiddle ?? latestExisting?.ts_middle_seconds ?? null;
+      const resolvedBottom = submittedBottom ?? latestExisting?.ts_bottom_seconds ?? null;
+      const resolvedLoomUrl = String(formData.get("loom_url") ?? "").trim() || latestExisting?.loom_url || "";
+
+      let referenceId = "";
+      const { data: existingReference } = await sb
+        .from("exercise_reference_videos")
+        .select("id")
+        .eq("coach_id", targetCoachId)
+        .eq("exercise_id", exerciseId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingReference?.id) {
+        const { error: referenceUpdateError } = await sb
+          .from("exercise_reference_videos")
+          .update({
+            loom_url: resolvedLoomUrl,
+            audience: "all",
+            feedback_category: null,
+            cue_notes: null,
+            ts_top_seconds: resolvedTop,
+            ts_middle_seconds: resolvedMiddle,
+            ts_bottom_seconds: resolvedBottom
+          })
+          .eq("id", existingReference.id);
+        if (referenceUpdateError) {
+          redirect("/coach/exercises?sample_error=reference_insert_failed");
+        }
+        referenceId = existingReference.id;
+      } else {
+        const { data: insertedReference, error: referenceInsertError } = await sb
+          .from("exercise_reference_videos")
+          .insert({
+            exercise_id: exerciseId,
+            coach_id: targetCoachId,
+            loom_url: resolvedLoomUrl,
+            audience: "all",
+            feedback_category: null,
+            cue_notes: null,
+            ts_top_seconds: resolvedTop,
+            ts_middle_seconds: resolvedMiddle,
+            ts_bottom_seconds: resolvedBottom
+          })
+          .select("id")
+          .single();
+        if (referenceInsertError || !insertedReference?.id) {
+          redirect("/coach/exercises?sample_error=reference_insert_failed");
+        }
+        referenceId = insertedReference.id;
+      }
+
+      const duration = Number(sampleDurations[0] ?? 0) || null;
+      const { data: existingAsset } = await sb
+        .from("exercise_reference_video_assets")
+        .select("id")
+        .eq("reference_video_id", referenceId)
+        .eq("position", 1)
+        .limit(1)
+        .maybeSingle();
+      if (existingAsset?.id) {
+        const { error: assetUpdateError } = await sb
+          .from("exercise_reference_video_assets")
+          .update({
+            video_url: sampleUrls[0],
+            duration_seconds: duration
+          })
+          .eq("id", existingAsset.id);
+        if (assetUpdateError) {
+          redirect("/coach/exercises?sample_error=asset_insert_failed");
+        }
+      } else {
+        const { error: assetInsertError } = await sb.from("exercise_reference_video_assets").insert({
+          reference_video_id: referenceId,
+          video_url: sampleUrls[0],
+          duration_seconds: duration,
+          position: 1
+        });
+        if (assetInsertError) {
+          redirect("/coach/exercises?sample_error=asset_insert_failed");
+        }
+      }
+
+      let generatedPhotoUrls: Partial<Record<"top" | "middle" | "bottom", string>> = {};
+      if (videoSource === "link" && sampleUrls[0]) {
+        try {
+          const frameBuffers = await generateTimestampScreenshots(sampleUrls[0], {
+            top: resolvedTop,
+            middle: resolvedMiddle,
+            bottom: resolvedBottom
+          });
+          for (const slot of ["top", "middle", "bottom"] as const) {
+            const frame = frameBuffers[slot];
+            if (!frame?.buffer) continue;
+            const uploadPath = `${targetCoachId}/exercise-${exerciseId}-sample-${slot}-${Date.now()}.jpg`;
+            const uploadBody = Buffer.from(new Uint8Array(frame.buffer));
+            const { error: uploadErr } = await sb.storage
+              .from("exercise-sample-videos")
+              .upload(uploadPath, uploadBody, {
+                upsert: true,
+                contentType: "image/jpeg",
+                cacheControl: "3600"
+              });
+            if (!uploadErr) {
+              const { data: publicData } = sb.storage.from("exercise-sample-videos").getPublicUrl(uploadPath);
+              generatedPhotoUrls[slot] = publicData.publicUrl;
+            }
+          }
+        } catch {
+          // Non-blocking for add-exercise flow
+        }
+      }
+
+      const topPhoto = String(formData.get("photo_top") ?? "").trim() || generatedPhotoUrls.top || "";
+      const middlePhoto = String(formData.get("photo_middle") ?? "").trim() || generatedPhotoUrls.middle || "";
+      const bottomPhoto = String(formData.get("photo_bottom") ?? "").trim() || generatedPhotoUrls.bottom || "";
+
+      for (const [position, photoUrl] of [
+        ["top", topPhoto],
+        ["middle", middlePhoto],
+        ["bottom", bottomPhoto]
+      ] as const) {
+        if (!photoUrl) continue;
+        const { data: existingPhoto } = await sb
+          .from("exercise_rep_photos")
+          .select("id")
+          .eq("exercise_id", exerciseId)
+          .eq("position", position)
+          .limit(1)
+          .maybeSingle();
+        if (existingPhoto?.id) {
+          await sb
+            .from("exercise_rep_photos")
+            .update({ url: photoUrl, source: "coach_sample", uploaded_by: targetCoachId })
+            .eq("id", existingPhoto.id);
+        } else {
+          await sb.from("exercise_rep_photos").insert({
+            exercise_id: exerciseId,
+            position,
+            url: photoUrl,
+            source: "coach_sample",
+            uploaded_by: targetCoachId
+          });
+        }
+      }
     }
 
     redirect("/coach/exercises");
@@ -490,28 +670,30 @@ export default async function CoachExercisesPage({
               <input className="input md:col-span-2" name="where_to_feel" placeholder="Where to feel" />
               <textarea className="textarea md:col-span-2" name="dos_examples" placeholder="Do examples" />
               <textarea className="textarea md:col-span-2" name="donts_examples" placeholder="Don't examples" />
+              <div className="metric p-3 md:col-span-2">
+                <h3 className="text-lg">Sample Video + Rep Points (Top/Middle/Bottom)</h3>
+                <ExerciseSampleUploadForm
+                  exercises={(exercises ?? []).map((exercise) => ({
+                    id: exercise.id,
+                    name: exercise.name,
+                    category: exercise.category,
+                    exercise_group: exercise.exercise_group,
+                    exercise_subgroup: exercise.exercise_subgroup,
+                    structural_goal: exercise.structural_goal,
+                    cues: exercise.cues,
+                    purpose_impact: exercise.purpose_impact,
+                    where_to_feel: exercise.where_to_feel,
+                    dos_examples: exercise.dos_examples,
+                    donts_examples: exercise.donts_examples
+                  }))}
+                  action={addReferenceVideo}
+                  embeddedInParentForm
+                  hideExerciseSelect
+                  showSubmitButton={false}
+                />
+              </div>
               <button className="btn btn-primary md:col-span-2" type="submit">Save Exercise</button>
             </form>
-
-            <div className="metric p-3">
-              <h3 className="text-lg">Sample Video + Rep Points (Top/Middle/Bottom)</h3>
-              <ExerciseSampleUploadForm
-                exercises={(exercises ?? []).map((exercise) => ({
-                  id: exercise.id,
-                  name: exercise.name,
-                  category: exercise.category,
-                  exercise_group: exercise.exercise_group,
-                  exercise_subgroup: exercise.exercise_subgroup,
-                  structural_goal: exercise.structural_goal,
-                  cues: exercise.cues,
-                  purpose_impact: exercise.purpose_impact,
-                  where_to_feel: exercise.where_to_feel,
-                  dos_examples: exercise.dos_examples,
-                  donts_examples: exercise.donts_examples
-                }))}
-                action={addReferenceVideo}
-              />
-            </div>
           </div>
         </details>
       </section>

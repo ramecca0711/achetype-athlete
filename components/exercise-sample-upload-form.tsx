@@ -43,6 +43,9 @@ type Props = {
   initialMiddleTs?: number | null;
   initialBottomTs?: number | null;
   action: (formData: FormData) => void;
+  embeddedInParentForm?: boolean;
+  hideExerciseSelect?: boolean;
+  showSubmitButton?: boolean;
 };
 
 const MAX_VIDEOS = 1;
@@ -125,7 +128,10 @@ export default function ExerciseSampleUploadForm({
   initialTopTs = null,
   initialMiddleTs = null,
   initialBottomTs = null,
-  action
+  action,
+  embeddedInParentForm = false,
+  hideExerciseSelect = false,
+  showSubmitButton = true
 }: Props) {
   const trimmedInitialVideoUrl = initialVideoUrl.trim();
   const initialSource: "upload" | "link" =
@@ -476,11 +482,11 @@ export default function ExerciseSampleUploadForm({
     [exercises, selectedExerciseId]
   );
 
-  return (
-    <form action={action} className="grid md:grid-cols-2 gap-3 mt-3">
+  const formContent = (
+    <>
       {fixedExerciseId ? (
         <input type="hidden" name="exercise_id" value={fixedExerciseId} readOnly />
-      ) : (
+      ) : !hideExerciseSelect ? (
         <label className="text-sm block md:col-span-2">
           Exercise
           <select
@@ -496,9 +502,9 @@ export default function ExerciseSampleUploadForm({
             ))}
           </select>
         </label>
-      )}
+      ) : null}
 
-      {selectedExercise && (
+      {!hideExerciseSelect && selectedExercise && (
         <details className="md:col-span-2 border rounded p-3 bg-white" open={false}>
           <summary className="cursor-pointer list-none text-sm font-semibold">
             Exercise Database Info
@@ -770,16 +776,28 @@ export default function ExerciseSampleUploadForm({
       <input type="hidden" name="photo_middle" value={middlePhotoUrl} readOnly />
       <input type="hidden" name="photo_bottom" value={bottomPhotoUrl} readOnly />
 
-      <button
-        className="btn btn-primary md:col-span-2"
-        type="submit"
-        disabled={
-          uploading ||
-          (videoSource === "upload" ? !uploadedVideos.length : !loadedLinkUrl)
-        }
-      >
-        Save Sample
-      </button>
+      {showSubmitButton && (
+        <button
+          className="btn btn-primary md:col-span-2"
+          type="submit"
+          disabled={
+            uploading ||
+            (videoSource === "upload" ? !uploadedVideos.length : !loadedLinkUrl)
+          }
+        >
+          Save Sample
+        </button>
+      )}
+    </>
+  );
+
+  if (embeddedInParentForm) {
+    return <div className="grid md:grid-cols-2 gap-3 mt-3">{formContent}</div>;
+  }
+
+  return (
+    <form action={action} className="grid md:grid-cols-2 gap-3 mt-3">
+      {formContent}
     </form>
   );
 }
