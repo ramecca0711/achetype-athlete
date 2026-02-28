@@ -46,6 +46,7 @@ export default async function CoachExercisesPage({
     archetype?: string;
     deleted?: string;
     delete_error?: string;
+    search?: string;
   };
 }) {
   const supabase = createSupabaseServer();
@@ -363,7 +364,7 @@ export default async function CoachExercisesPage({
     redirect(`/coach/exercises?deleted=${exerciseId}`);
   }
 
-  const [{ data: exercises }, { data: videos }] = await Promise.all([
+  const [{ data: exercises }, { data: videos }, { data: coachFeedbackRows }] = await Promise.all([
     supabase
       .from("exercises")
       .select("id, name, category, exercise_group, exercise_subgroup, structural_goal, cues, purpose_impact, where_to_feel, dos_examples, donts_examples")
@@ -374,6 +375,12 @@ export default async function CoachExercisesPage({
       .eq("coach_id", scopedCoachId)
       .order("created_at", { ascending: false })
       .limit(300),
+    // All feedback notes this coach has given across all athletes, grouped by exercise
+    supabase
+      .from("review_requests")
+      .select("exercise_id, feedback_text, quick_notes, feedback_score, created_at")
+      .eq("coach_id", scopedCoachId)
+      .order("created_at", { ascending: true }),
   ]);
   const exerciseIds = (exercises ?? []).map((exercise) => exercise.id);
   const [{ data: repPhotos }] = await Promise.all([
@@ -399,6 +406,18 @@ export default async function CoachExercisesPage({
       repPhotoByExerciseAndPosition.set(key, row.image_url);
     }
   }
+
+  // Aggregate all feedback notes this coach has given, grouped by exercise_id
+  type CoachFeedbackEntry = { date: string; score: number | null; text: string | null; notes: string | null };
+  const coachFeedbackByExercise = new Map<string, CoachFeedbackEntry[]>();
+  for (const row of coachFeedbackRows ?? []) {
+    // Only include rows where the coach actually wrote something
+    if (!row.feedback_text && !row.quick_notes) continue;
+    const arr = coachFeedbackByExercise.get(row.exercise_id) ?? [];
+    arr.push({ date: row.created_at, score: row.feedback_score ?? null, text: row.feedback_text ?? null, notes: row.quick_notes ?? null });
+    coachFeedbackByExercise.set(row.exercise_id, arr);
+  }
+
   const currentEditId = searchParams?.edit ?? "";
   const sampleSavedForId = searchParams?.sample_saved_for ?? "";
   const selectedGroup = String(searchParams?.group ?? "").trim();
@@ -430,8 +449,12 @@ export default async function CoachExercisesPage({
   const exerciseOptions = archetypeScopedExercises
     .map((exercise) => ({ id: exercise.id, name: exercise.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  // Text search filter — case-insensitive substring match on exercise name
+  const selectedSearch = String(searchParams?.search ?? "").trim().toLowerCase();
   const filteredExercises = selectedExerciseId
     ? archetypeScopedExercises.filter((exercise) => exercise.id === selectedExerciseId)
+    : selectedSearch
+    ? archetypeScopedExercises.filter((exercise) => exercise.name.toLowerCase().includes(selectedSearch))
     : archetypeScopedExercises;
   const groupedFiltered = filteredExercises.reduce<Record<string, typeof filteredExercises>>((acc, exercise) => {
     const key = String(exercise.exercise_group ?? "Unassigned");
@@ -534,6 +557,10 @@ export default async function CoachExercisesPage({
                 <option key={archetype} value={archetype}>{archetype}</option>
               ))}
             </select>
+          </label>
+          <label className="text-sm block md:col-span-4">
+            Search by name
+            <input className="input mt-1" type="text" name="search" placeholder="Type to filter by name..." defaultValue={selectedSearch} />
           </label>
           <div className="md:col-span-4">
             <button className="btn btn-primary" type="submit">Apply Filters</button>
@@ -702,6 +729,28 @@ export default async function CoachExercisesPage({
                   </details>
                 );
               })()}
+              {/* Feedback history: shows all notes this coach has given for this exercise across all athletes */}
+              {(coachFeedbackByExercise.get(exercise.id) ?? []).length > 0 && (
+                <div className="mt-3 border-t pt-3">
+                  <h4 className="text-sm font-semibold mb-2">
+                    Feedback Given ({coachFeedbackByExercise.get(exercise.id)!.length} note{coachFeedbackByExercise.get(exercise.id)!.length !== 1 ? "s" : ""})
+                  </h4>
+                  <div className="space-y-2">
+                    {(coachFeedbackByExercise.get(exercise.id) ?? []).map((entry, i) => (
+                      <div key={i} className="metric p-2 text-sm">
+                        {/* Date and score for quick reference */}
+                        <p className="meta text-xs">
+                          {entry.date ? new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                          {entry.score != null ? ` · Score: ${entry.score}/5` : ""}
+                        </p>
+                        {entry.text && <p className="mt-1">{entry.text}</p>}
+                        {entry.notes && <p className="meta mt-1">{entry.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {isEditing && (
                 <div className="metric p-3 space-y-3">
                   {searchParams?.edit === exercise.id && searchParams?.sample_saved === "1" && (

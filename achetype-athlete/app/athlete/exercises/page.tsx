@@ -63,7 +63,7 @@ function getArchetypeFilterValue(structuralGoal: string | null | undefined): str
 export default async function AthleteExercisesPage({
   searchParams
 }: {
-  searchParams?: { group?: string; subgroup?: string; exercise?: string; archetype?: string };
+  searchParams?: { group?: string; subgroup?: string; exercise?: string; archetype?: string; search?: string };
 }) {
   const supabase = createSupabaseServer();
   const {
@@ -108,13 +108,29 @@ export default async function AthleteExercisesPage({
     assetsByReference.set(asset.reference_video_id, existing);
   }
   const exerciseIds = (exercises ?? []).map((item) => item.id);
-  const [{ data: repPhotos }] = await Promise.all([
+  const [{ data: repPhotos }, { data: feedbackRows }, { data: legacyFeedbackRows }] = await Promise.all([
+    // Rep photos for top/middle/bottom position sample images
     exerciseIds.length
       ? supabase
           .from("exercise_rep_photos")
           .select("exercise_id, photo_position, image_url, created_at")
           .in("exercise_id", exerciseIds)
           .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as any[] }),
+    // Coach feedback notes left on this athlete's review requests, oldest first
+    exerciseIds.length
+      ? supabase
+          .from("review_requests")
+          .select("exercise_id, feedback_text, quick_notes, feedback_score, created_at")
+          .eq("athlete_id", scopedAthleteId)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as any[] }),
+    // Legacy imported feedback from the exercise_feedback_log table
+    exerciseIds.length
+      ? supabase
+          .from("exercise_feedback_log")
+          .select("exercise_id, feedback_text, feedback_date, client_name")
+          .in("exercise_id", exerciseIds)
       : Promise.resolve({ data: [] as any[] })
   ]);
   const samplePhotoByExerciseAndPosition = new Map<string, string>();
@@ -123,6 +139,23 @@ export default async function AthleteExercisesPage({
     if (!samplePhotoByExerciseAndPosition.has(key)) {
       samplePhotoByExerciseAndPosition.set(key, row.image_url);
     }
+  }
+
+  // Aggregate all feedback notes per exercise so we can show a history summary in each card
+  type FeedbackEntry = { date: string; score: number | null; text: string | null; notes: string | null };
+  const feedbackByExercise = new Map<string, FeedbackEntry[]>();
+  for (const row of feedbackRows ?? []) {
+    // Only include rows where the coach actually left a note
+    if (!row.feedback_text && !row.quick_notes) continue;
+    const arr = feedbackByExercise.get(row.exercise_id) ?? [];
+    arr.push({ date: row.created_at, score: row.feedback_score ?? null, text: row.feedback_text ?? null, notes: row.quick_notes ?? null });
+    feedbackByExercise.set(row.exercise_id, arr);
+  }
+  for (const row of legacyFeedbackRows ?? []) {
+    if (!row.feedback_text) continue;
+    const arr = feedbackByExercise.get(row.exercise_id) ?? [];
+    arr.push({ date: row.feedback_date ?? "", score: null, text: row.feedback_text ?? null, notes: null });
+    feedbackByExercise.set(row.exercise_id, arr);
   }
 
   const allExercises = exercises ?? [];
@@ -159,8 +192,12 @@ export default async function AthleteExercisesPage({
     .map((exercise) => ({ id: exercise.id, name: exercise.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const selectedExerciseId = (searchParams?.exercise ?? "").trim();
+  // Text search filter — case-insensitive substring match on exercise name
+  const selectedSearch = (searchParams?.search ?? "").trim().toLowerCase();
   const filteredExercises = selectedExerciseId
     ? archetypeScopedExercises.filter((exercise) => exercise.id === selectedExerciseId)
+    : selectedSearch
+    ? archetypeScopedExercises.filter((exercise) => exercise.name.toLowerCase().includes(selectedSearch))
     : archetypeScopedExercises;
   const groupedFiltered = filteredExercises.reduce<Record<string, typeof filteredExercises>>((acc, exercise) => {
     const key = String(exercise.exercise_group ?? "Unassigned");
@@ -212,6 +249,10 @@ export default async function AthleteExercisesPage({
                 <option key={archetype} value={archetype}>{archetype}</option>
               ))}
             </select>
+          </label>
+          <label className="text-sm block md:col-span-4">
+            Search by name
+            <input className="input mt-1" type="text" name="search" placeholder="Type to filter by name..." defaultValue={selectedSearch} />
           </label>
           <div className="md:col-span-4">
             <button className="btn btn-primary" type="submit">Apply Filters</button>
@@ -304,6 +345,28 @@ export default async function AthleteExercisesPage({
               ))}
               {!refs.length && <p className="text-sm text-red-700">Sample video: Missing</p>}
             </div>
+
+            {/* Feedback history: aggregates all coach notes for this exercise received by this athlete */}
+            {(feedbackByExercise.get(exercise.id) ?? []).length > 0 && (
+              <div className="mt-3 border-t pt-3">
+                <h4 className="text-sm font-semibold mb-2">
+                  Feedback History ({feedbackByExercise.get(exercise.id)!.length} note{feedbackByExercise.get(exercise.id)!.length !== 1 ? "s" : ""})
+                </h4>
+                <div className="space-y-2">
+                  {(feedbackByExercise.get(exercise.id) ?? []).map((entry, i) => (
+                    <div key={i} className="metric p-2 text-sm">
+                      {/* Date and score badge for quick context */}
+                      <p className="meta text-xs">
+                        {entry.date ? new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                        {entry.score != null ? ` · Score: ${entry.score}/5` : ""}
+                      </p>
+                      {entry.text && <p className="mt-1">{entry.text}</p>}
+                      {entry.notes && <p className="meta mt-1">{entry.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>
           </details>
         );
