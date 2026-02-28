@@ -115,11 +115,13 @@ export default function RequestReviewForm({ exercises, action }: Props) {
     middle: false,
     bottom: false
   });
+  const [submitValidationError, setSubmitValidationError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   async function onPickFiles(event: React.ChangeEvent<HTMLInputElement>) {
     setError("");
+    setSubmitValidationError("");
     const selected = Array.from(event.target.files ?? []);
 
     if (!selected.length) return;
@@ -159,6 +161,7 @@ export default function RequestReviewForm({ exercises, action }: Props) {
   async function uploadFilesInternal(filesToUpload: File[]) {
     setUploading(true);
     setError("");
+    setSubmitValidationError("");
 
     const uploaded: UploadedVideo[] = [];
     const {
@@ -259,6 +262,32 @@ export default function RequestReviewForm({ exercises, action }: Props) {
       return;
     }
     await uploadFilesInternal(files);
+  }
+
+  function onFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    setSubmitValidationError("");
+
+    if (uploading) {
+      event.preventDefault();
+      setSubmitValidationError("Please wait for the video upload to finish before submitting.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    if (!uploadedVideos.length) {
+      event.preventDefault();
+      setSubmitValidationError("Upload one video before submitting your review request.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const form = event.currentTarget;
+    const exerciseId = String(new FormData(form).get("exercise_id") ?? "").trim();
+    if (!exerciseId) {
+      event.preventDefault();
+      setSubmitValidationError("Select an exercise before submitting your review request.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   function onVideoLoadedMetadata(event: React.SyntheticEvent<HTMLVideoElement>) {
@@ -437,7 +466,12 @@ export default function RequestReviewForm({ exercises, action }: Props) {
   const activeVideo = uploadedVideos[0];
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-4" onSubmit={onFormSubmit}>
+      {submitValidationError && (
+        <p className="text-red-700 text-sm border border-red-200 bg-red-50 rounded p-2">
+          {submitValidationError}
+        </p>
+      )}
       <label className="text-sm block">
         Select Exercise
         <select className="select mt-1" name="exercise_id" required>
@@ -599,7 +633,7 @@ export default function RequestReviewForm({ exercises, action }: Props) {
       <input type="hidden" name="request_photo_middle" value={middlePhotoUrl} readOnly />
       <input type="hidden" name="request_photo_bottom" value={bottomPhotoUrl} readOnly />
 
-      <button className="btn btn-primary" type="submit" disabled={!uploadedVideos.length || uploading}>
+      <button className="btn btn-primary" type="submit" disabled={uploading}>
         Submit Review Request
       </button>
     </form>
