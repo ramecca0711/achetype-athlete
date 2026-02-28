@@ -10,7 +10,6 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
@@ -143,12 +142,9 @@ export default function LoginPage() {
     <main className="shell min-h-screen flex items-center justify-center">
       <section className="card w-full max-w-lg p-6 sm:p-8">
         <div className="flex items-center justify-between">
-          <p className="badge inline-block">Gunther Portal</p>
-          <Link href="/" className="btn btn-secondary">
-            Home
-          </Link>
+          <p className="badge inline-block">Your Portal</p>
         </div>
-        <h1 className="text-3xl sm:text-4xl mt-4">Athlete + Coach Platform</h1>
+        <h1 className="text-3xl sm:text-4xl mt-4">Archetype Athlete portal</h1>
         <p className="meta mt-2">Programming, video submissions, AI notes, and coach feedback queue.</p>
 
         <div className="mt-6 grid grid-cols-2 gap-2">

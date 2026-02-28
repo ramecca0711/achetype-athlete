@@ -129,12 +129,14 @@ export default function RequestReviewForm({ exercises, action }: Props) {
     }
 
     try {
+      // Validate duration before committing to state or uploading
       for (const file of selected) {
         const durationSeconds = await getVideoDuration(file);
         if (durationSeconds > MAX_DURATION_SECONDS) {
           throw new Error(`${file.name} is longer than 3 minutes.`);
         }
       }
+      // Reset all state for the new video
       setFiles(selected);
       setUploadedVideos([]);
       setTopTs(null);
@@ -143,17 +145,18 @@ export default function RequestReviewForm({ exercises, action }: Props) {
       setTopPhotoUrl("");
       setMiddlePhotoUrl("");
       setBottomPhotoUrl("");
+      // Auto-start upload immediately after validation so the Submit button
+      // becomes enabled without a separate "Upload Video" click step.
+      await uploadFilesInternal(selected);
     } catch (metadataError) {
       setError((metadataError as Error).message);
     }
   }
 
-  async function uploadFiles() {
-    if (!files.length) {
-      setError("Choose 1 video file first.");
-      return;
-    }
-
+  // Core upload logic — accepts explicit file list so it can be called
+  // both from the retry button (using `files` state) and from onPickFiles
+  // (using freshly validated files before state has settled).
+  async function uploadFilesInternal(filesToUpload: File[]) {
     setUploading(true);
     setError("");
 
@@ -168,8 +171,8 @@ export default function RequestReviewForm({ exercises, action }: Props) {
       return;
     }
 
-    for (let i = 0; i < files.length; i += 1) {
-      const file = files[i];
+    for (let i = 0; i < filesToUpload.length; i += 1) {
+      const file = filesToUpload[i];
       const durationSeconds = await getVideoDuration(file);
 
       if (durationSeconds > MAX_DURATION_SECONDS) {
@@ -247,6 +250,15 @@ export default function RequestReviewForm({ exercises, action }: Props) {
     setTopPhotoUrl("");
     setMiddlePhotoUrl("");
     setBottomPhotoUrl("");
+  }
+
+  // Retry button wrapper — uploads from current `files` state.
+  async function uploadFiles() {
+    if (!files.length) {
+      setError("Choose 1 video file first.");
+      return;
+    }
+    await uploadFilesInternal(files);
   }
 
   function onVideoLoadedMetadata(event: React.SyntheticEvent<HTMLVideoElement>) {
@@ -455,8 +467,9 @@ export default function RequestReviewForm({ exercises, action }: Props) {
         {!!files[0] && (
           <p className="text-xs meta mt-1">Selected: {files[0].name} ({formatBytes(files[0].size)})</p>
         )}
-        <button className="btn btn-secondary mt-2" type="button" onClick={uploadFiles} disabled={uploading}>
-          {uploading ? "Uploading..." : "Upload Video"}
+        {/* Upload starts automatically on file selection; this button retries if needed */}
+        <button className="btn btn-secondary mt-2" type="button" onClick={uploadFiles} disabled={uploading || !files.length}>
+          {uploading ? "Uploading..." : "Retry Upload"}
         </button>
         {error && <p className="text-red-700 text-sm mt-2">{error}</p>}
 

@@ -9,16 +9,19 @@
  * - `components/right-sidebar.tsx`
  * Note: Update related files together when changing data shape or shared behavior.
  */
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import RequestReviewForm from "@/components/request-review-form";
 import TimestampFramePreview from "@/components/timestamp-frame-preview";
+import { confidencePhrases } from "@/lib/types";
 
 export default async function AthleteRequestReviewPage({
   searchParams
 }: {
-  searchParams?: { status?: string; error?: string; deleted?: string };
+  // `edit` holds the request ID currently in inline-edit mode (URL-driven, no client state needed)
+  searchParams?: { status?: string; error?: string; deleted?: string; edit?: string };
 }) {
   const supabase = createSupabaseServer();
   const {
@@ -42,7 +45,9 @@ export default async function AthleteRequestReviewPage({
     supabase.from("exercises").select("id, name, exercise_group").order("name", { ascending: true }),
     supabase
       .from("review_requests")
-      .select("id, exercise_id, confidence_score, notes, created_at, submission_video_url, ts_top_seconds, ts_middle_seconds, ts_bottom_seconds, exercise:exercises(name), videos:review_request_videos(video_url, position, duration_seconds)")
+      // Include updated_at and feedback_category so we can show the edit timestamp
+      // and pre-populate the edit form fields
+      .select("id, exercise_id, confidence_score, notes, feedback_category, created_at, updated_at, submission_video_url, ts_top_seconds, ts_middle_seconds, ts_bottom_seconds, exercise:exercises(name), videos:review_request_videos(video_url, position, duration_seconds)")
       .eq("athlete_id", scopedAthleteId)
       .eq("status", "pending")
       .order("created_at", { ascending: false })
@@ -227,6 +232,43 @@ export default async function AthleteRequestReviewPage({
     redirect(`/athlete/request-review?deleted=${requestId}`);
   }
 
+  // Inline edit action — updates notes, confidence, and category on a pending request.
+  // Sets updated_at explicitly so both athlete and coach views reflect the edit time.
+  async function editPendingRequest(formData: FormData) {
+    "use server";
+    const sb = createSupabaseServer();
+    const {
+      data: { user: actionUser }
+    } = await sb.auth.getUser();
+    if (!actionUser) redirect("/login");
+    const { data: actionMe } = await sb.from("profiles").select("role").eq("id", actionUser.id).maybeSingle();
+    const actionCookies = await cookies();
+    const targetAthleteId =
+      actionMe?.role === "admin" ? actionCookies.get("admin_view_athlete_id")?.value || "" : actionUser.id;
+    if (!targetAthleteId) redirect("/admin");
+
+    const requestId = String(formData.get("request_id") ?? "").trim();
+    if (!requestId) redirect("/athlete/request-review?error=edit_failed");
+
+    const { error: updateError } = await sb
+      .from("review_requests")
+      .update({
+        confidence_score: Number(formData.get("confidence_score") ?? 3),
+        notes: String(formData.get("notes") ?? "") || null,
+        feedback_category: String(formData.get("feedback_category") ?? "") || null,
+        // Stamp updated_at so both athlete and coach views can show when the request was last edited
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", requestId)
+      .eq("athlete_id", targetAthleteId)
+      .eq("status", "pending");
+
+    if (updateError) {
+      redirect("/athlete/request-review?error=edit_failed");
+    }
+    redirect("/athlete/request-review?status=updated");
+  }
+
   return (
     <main className="shell space-y-4">
       <section className="card p-6">
@@ -238,9 +280,12 @@ export default async function AthleteRequestReviewPage({
         {searchParams?.status === "submitted" && (
           <p className="text-green-700 text-sm mt-2">Review request submitted. It is now in pending.</p>
         )}
+        {searchParams?.status === "updated" && (
+          <p className="text-green-700 text-sm mt-2">Request updated successfully.</p>
+        )}
         {!!searchParams?.error && (
           <p className="text-red-700 text-sm mt-2">
-            Submit failed:{" "}
+            Action failed:{" "}
             {searchParams.error === "no_coach" && "no coach relationship is linked yet."}
             {searchParams.error === "video_required" && "upload one video first."}
             {searchParams.error === "video_too_long" && "video must be 3 minutes or less."}
@@ -248,7 +293,8 @@ export default async function AthleteRequestReviewPage({
             {searchParams.error === "video_link_failed" && "request saved but video link entry failed."}
             {searchParams.error === "submit_failed" && "could not save request."}
             {searchParams.error === "delete_failed" && "could not delete pending request."}
-            {!["no_coach", "video_required", "video_too_long", "exercise_required", "video_link_failed", "submit_failed", "delete_failed"].includes(searchParams.error) &&
+            {searchParams.error === "edit_failed" && "could not update request."}
+            {!["no_coach", "video_required", "video_too_long", "exercise_required", "video_link_failed", "submit_failed", "delete_failed", "edit_failed"].includes(searchParams.error) &&
               "unexpected error."}
           </p>
         )}
@@ -273,6 +319,64 @@ export default async function AthleteRequestReviewPage({
               if (v.position === 102) requestPhotoByPosition.set("middle", v.video_url);
               if (v.position === 103) requestPhotoByPosition.set("bottom", v.video_url);
             }
+
+            // When this request is being edited, render an inline edit form card
+            // instead of the normal expandable details view.
+            const isEditing = searchParams?.edit === request.id;
+
+            if (isEditing) {
+              return (
+                <div key={request.id} className="border rounded-xl p-4 bg-white">
+                  <div className="flex gap-2 flex-wrap items-center justify-between mb-3">
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <span className="font-semibold">{exercise?.name ?? "Exercise"}</span>
+                      <span className="badge">Editing</span>
+                    </div>
+                    {/* Cancel edit — navigate back without the edit param */}
+                    <Link href="/athlete/request-review" className="btn btn-secondary text-xs">
+                      Cancel
+                    </Link>
+                  </div>
+
+                  {/* Show both timestamps when in edit mode */}
+                  <p className="text-sm meta">Submitted: {new Date(request.created_at).toLocaleString()}</p>
+                  {request.updated_at && (
+                    <p className="text-sm meta">Updated: {new Date(request.updated_at).toLocaleString()}</p>
+                  )}
+
+                  <form action={editPendingRequest} className="mt-3 space-y-3">
+                    <input type="hidden" name="request_id" value={request.id} />
+                    <label className="text-sm block">
+                      Confidence Score
+                      <select className="select mt-1" name="confidence_score" defaultValue={request.confidence_score}>
+                        {Object.entries(confidencePhrases).map(([score, phrase]) => (
+                          <option key={score} value={score}>{score} - {phrase}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-sm block">
+                      Feedback Category
+                      <input
+                        className="input mt-1"
+                        name="feedback_category"
+                        placeholder="breathing, hip shift"
+                        defaultValue={request.feedback_category ?? ""}
+                      />
+                    </label>
+                    <label className="text-sm block">
+                      Notes / Questions
+                      <textarea className="textarea mt-1" name="notes" defaultValue={request.notes ?? ""} />
+                    </label>
+                    <div className="flex gap-2">
+                      <button className="btn btn-primary" type="submit">Save Changes</button>
+                      <Link href="/athlete/request-review" className="btn btn-secondary">Cancel</Link>
+                    </div>
+                  </form>
+                </div>
+              );
+            }
+
+            // Normal (view) mode — expandable details card with edit + delete buttons
             return (
               <details key={request.id} className="border rounded-xl p-3 bg-white" open={false}>
                 <summary className="cursor-pointer list-none">
@@ -282,26 +386,45 @@ export default async function AthleteRequestReviewPage({
                       <span className="badge">Confidence {request.confidence_score}</span>
                       {searchParams?.deleted === request.id && <span className="badge">Deleted</span>}
                     </div>
-                    <form action={deletePendingRequest}>
-                      <input type="hidden" name="request_id" value={request.id} />
-                      <button
-                        type="submit"
+                    <div className="flex gap-2">
+                      {/* Edit button — navigates to ?edit=requestId to show inline edit form */}
+                      <Link
+                        href={`/athlete/request-review?edit=${request.id}`}
                         className="btn btn-secondary"
-                        title="Delete pending request"
-                        aria-label="Delete pending request"
+                        title="Edit pending request"
+                        aria-label="Edit pending request"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M10 10v6M14 10v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      </button>
-                    </form>
+                      </Link>
+                      {/* Delete button */}
+                      <form action={deletePendingRequest}>
+                        <input type="hidden" name="request_id" value={request.id} />
+                        <button
+                          type="submit"
+                          className="btn btn-secondary"
+                          title="Delete pending request"
+                          aria-label="Delete pending request"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M10 10v6M14 10v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      </form>
+                    </div>
                   </div>
                 </summary>
                 <div className="mt-2">
+                  {/* Submitted timestamp always shown; Updated shown only if the request has been edited */}
                   <p className="text-sm meta">Submitted: {new Date(request.created_at).toLocaleString()}</p>
+                  {request.updated_at && (
+                    <p className="text-sm meta">Updated: {new Date(request.updated_at).toLocaleString()}</p>
+                  )}
                   {request.notes && <p className="text-sm mt-1">{request.notes}</p>}
                   <div className="space-y-2 mt-3">
                     {([

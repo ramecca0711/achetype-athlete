@@ -161,6 +161,7 @@ export default async function CoachReviewLogPage({
         quick_notes,
         feedback_text,
         created_at,
+        updated_at,
         athlete:profiles!review_requests_athlete_id_fkey(full_name),
         exercise:exercises(name),
         videos:review_request_videos(video_url, position, duration_seconds)
@@ -284,7 +285,12 @@ export default async function CoachReviewLogPage({
             </summary>
 
             <div className="mt-3">
-              <p className="text-sm">Video: {request.submission_video_url ? <a className="underline text-blue-700" href={request.submission_video_url} target="_blank">Open</a> : "-"}</p>
+              {/* Show when the athlete originally submitted and, if edited, when they last updated it */}
+              <p className="text-sm meta">Submitted: {new Date(request.created_at).toLocaleString()}</p>
+              {request.updated_at && (
+                <p className="text-sm meta">Updated: {new Date(request.updated_at).toLocaleString()}</p>
+              )}
+              <p className="text-sm mt-2">Video: {request.submission_video_url ? <a className="underline text-blue-700" href={request.submission_video_url} target="_blank">Open</a> : "-"}</p>
               {!!request.videos?.length && (
                 <div className="mt-1 space-y-1">
                   {request.videos.map((video: any) => (
