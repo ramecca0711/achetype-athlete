@@ -116,7 +116,9 @@ export default async function CoachExercisesPage({
     const hasSample = Array.isArray(sampleUrls) && sampleUrls.length === 1 && Boolean(sampleUrls[0]);
 
     const normalizeSeconds = (value: FormDataEntryValue | null): number | null => {
-      const num = Number(String(value ?? "").trim());
+      const raw = String(value ?? "").trim();
+      if (!raw) return null;
+      const num = Number(raw);
       if (!Number.isFinite(num) || num < 0) return null;
       return Math.round(num);
     };
@@ -309,7 +311,9 @@ export default async function CoachExercisesPage({
     const videoSource = String(formData.get("video_source") ?? "").trim();
 
     const normalizeSeconds = (value: FormDataEntryValue | null): number | null => {
-      const num = Number(String(value ?? "").trim());
+      const raw = String(value ?? "").trim();
+      if (!raw) return null;
+      const num = Number(raw);
       if (!Number.isFinite(num) || num < 0) return null;
       return Math.round(num);
     };
@@ -486,7 +490,7 @@ export default async function CoachExercisesPage({
     }
 
     redirect(
-      `/coach/exercises?sample_saved=1&sample_saved_for=${exerciseId}${
+      `/coach/exercises?edit=${exerciseId}&sample_saved=1&sample_saved_for=${exerciseId}${
         frameCaptureWarning
           ? `&sample_warning=frame_capture_unavailable&sample_debug=${encodeURIComponent(frameCaptureWarning)}`
           : ""
