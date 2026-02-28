@@ -5,6 +5,10 @@
  * - `app/layout.tsx`
  * - `components/right-sidebar.tsx`
  * Note: Update related files together when changing data shape or shared behavior.
+ *
+ * Design language: "refined editorial luxury" — drawn from guntherklaus.com/archetype-athlete
+ * Key references: Abril Fatface headings, Poppins body, warm off-white bg,
+ *   bronze (#BD9256) accent, near-black sidebar, minimal angular borders.
  */
 @tailwind base;
 @tailwind components;
@@ -12,14 +16,15 @@
 
 :root {
   color-scheme: light;
-  --bg: #f7f7f8;
+  --bg: #faf9f7;          /* warm off-white instead of cool tech gray */
   --card: #ffffff;
-  --ink: #1f2328;
-  --muted: #667085;
-  --line: #e5e7eb;
-  --blue: #2563eb;
+  --ink: #1a1a1a;         /* near-black, warmer than pure black */
+  --muted: #8a7f70;       /* warm taupe for secondary text */
+  --line: #e0d8cc;        /* warm border tone */
+  --bronze: #bd9256;      /* primary accent — Gunther Klaus bronze */
   --yellow: #f59e0b;
   --red: #ef4444;
+  --teal: #1dcec8;        /* secondary link color from the reference site */
 }
 
 * {
@@ -31,17 +36,24 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--ink);
-  font-family: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
+  /* Use Poppins loaded via next/font; fallback to system sans */
+  font-family: var(--font-body), "Poppins", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-size: 0.94rem;
+  line-height: 1.6;
 }
 
+/* Abril Fatface for all headings — gives the editorial luxury feel */
 h1,
 h2,
 h3,
 h4 {
-  font-family: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
-  font-weight: 600;
+  font-family: var(--font-heading), "Georgia", serif;
+  font-weight: 400;   /* Abril Fatface is inherently heavy; 400 maps to its display weight */
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
+
+/* ─── App shell ─────────────────────────────────────── */
 
 .app-shell {
   min-height: 100vh;
@@ -56,13 +68,16 @@ h4 {
 .shell {
   width: min(1120px, 100% - 1.5rem);
   margin: 0 auto;
-  padding: 1.1rem 0 2.2rem;
+  padding: 1.25rem 0 2.5rem;
 }
+
+/* ─── Sidebar — dark editorial panel ───────────────── */
 
 .right-sidebar {
   width: 250px;
-  border-left: 1px solid var(--line);
-  background: #fcfcfd;
+  /* Dark background matching the Gunther Klaus dark sections */
+  background: #1a1a1a;
+  border-left: 1px solid #2e2e2e;
   padding: 0.75rem;
   position: sticky;
   top: 0;
@@ -76,12 +91,20 @@ h4 {
 
 .sidebar-toggle {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid #383838;
+  border-radius: 3px;
+  background: #252525;
+  color: #c4b8a8;
   padding: 0.4rem 0.5rem;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+  background: #2e2e2e;
 }
 
 .sidebar-nav {
@@ -94,7 +117,7 @@ h4 {
 .sidebar-section {
   margin-top: 0.45rem;
   padding-top: 0.45rem;
-  border-top: 1px solid #eceff3;
+  border-top: 1px solid #2e2e2e;
 }
 
 .sidebar-list {
@@ -105,106 +128,163 @@ h4 {
 
 .sidebar-header {
   margin: 0.25rem 0 0.35rem;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  color: var(--muted);
+  color: #635c52;          /* dark muted label on dark bg */
   text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .sidebar-subheader {
   margin: 0.5rem 0 0.25rem;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  color: var(--muted);
+  color: #635c52;
   text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .sidebar-link {
   text-decoration: none;
-  color: #374151;
+  color: #b0a898;          /* warm mid-tone on dark sidebar */
   display: block;
-  padding: 0.24rem 0.1rem;
-  margin: 0.1rem 0;
-  font-size: 0.84rem;
+  padding: 0.28rem 0.15rem;
+  margin: 0.08rem 0;
+  font-size: 0.82rem;
   border-left: 2px solid transparent;
+  transition: color 0.15s;
 }
 
 .sidebar-link:hover {
-  color: #111827;
+  color: #ffffff;
 }
 
+/* Active link highlighted in bronze */
 .sidebar-link.active {
-  border-left-color: #2563eb;
-  color: #1d4ed8;
+  border-left-color: var(--bronze);
+  color: var(--bronze);
   font-weight: 600;
 }
 
 .sidebar-link-nested {
   margin-left: 0.75rem;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+}
+
+/* Muted text (email / role) on dark sidebar */
+.right-sidebar .meta {
+  color: #635c52;
 }
 
 .sidebar-signout {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid #383838;
+  border-radius: 3px;
+  background: #252525;
+  color: #b0a898;
   padding: 0.35rem 0.45rem;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
+  font-family: inherit;
   text-align: left;
+  letter-spacing: 0.04em;
+  cursor: pointer;
 }
 
+.sidebar-signout:hover {
+  background: #2e2e2e;
+  color: #fff;
+}
+
+/* ─── Cards & Metrics ───────────────────────────────── */
+
+/* More angular corners, no shadow — editorial restraint */
 .card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  border-radius: 4px;
 }
 
 .metric {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.7rem;
+  border-radius: 4px;
+  padding: 0.75rem;
   background: #fff;
 }
 
+/* ─── Buttons ───────────────────────────────────────── */
+
 .btn {
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--line);
-  padding: 0.5rem 0.8rem;
-  font-weight: 500;
-  font-size: 0.85rem;
+  padding: 0.48rem 1rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+  font-family: inherit;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-block;
 }
 
+/* Bronze primary — the Gunther Klaus signature CTA color */
 .btn-primary {
-  background: #111827;
+  background: var(--bronze);
   color: #fff;
-  border-color: #111827;
+  border-color: var(--bronze);
+}
+
+.btn-primary:hover {
+  background: #a87e45;
+  border-color: #a87e45;
 }
 
 .btn-secondary {
   background: #fff;
-  color: #111827;
+  color: var(--ink);
+  border-color: var(--line);
 }
 
-.badge {
-  border-radius: 9999px;
-  border: 1px solid var(--line);
-  background: #f9fafb;
-  font-size: 0.72rem;
-  padding: 0.2rem 0.5rem;
-  font-weight: 500;
+.btn-secondary:hover {
+  background: var(--bg);
 }
+
+/* ─── Badge ─────────────────────────────────────────── */
+
+/* Uppercase pill-less label — more editorial than rounded pill */
+.badge {
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-size: 0.66rem;
+  padding: 0.15rem 0.45rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: inherit;
+  display: inline-block;
+}
+
+/* ─── Form inputs ───────────────────────────────────── */
 
 .input,
 .select,
 .textarea {
   width: 100%;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   background: #fff;
   color: var(--ink);
   padding: 0.55rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid var(--bronze);
+  outline-offset: 1px;
+  border-color: var(--bronze);
 }
 
 .textarea {
@@ -212,39 +292,49 @@ h4 {
   resize: vertical;
 }
 
+/* ─── Utility classes ───────────────────────────────── */
+
 .meta {
   color: var(--muted);
 }
 
+/* Links use bronze instead of blue for brand consistency */
 .plain-link {
-  color: #1d4ed8;
+  color: var(--bronze);
   text-decoration: underline;
   font-size: 0.92rem;
 }
 
 .form-submit {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 3px;
   background: #fff;
   padding: 0.55rem 0.75rem;
   font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
 }
 
+/* ─── Status border accents ─────────────────────────── */
+
 .status-pending_review {
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--yellow);
 }
 
 .status-not_quite {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid var(--red);
 }
 
 .status-almost_there {
   border-left: 4px solid #f29900;
 }
 
+/* "There" status gets the bronze treatment */
 .status-there {
-  border-left: 4px solid #2563eb;
+  border-left: 4px solid var(--bronze);
 }
+
+/* ─── Details / disclosure ──────────────────────────── */
 
 details > summary {
   position: relative;
@@ -272,6 +362,8 @@ details[open] > summary::after {
   content: "^";
 }
 
+/* ─── Responsive ────────────────────────────────────── */
+
 @media (min-width: 768px) {
   .shell {
     width: min(1150px, 100% - 2rem);
@@ -288,7 +380,7 @@ details[open] > summary::after {
     height: auto;
     position: static;
     border-left: 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid #2e2e2e;
   }
 
   .right-sidebar.collapsed {
