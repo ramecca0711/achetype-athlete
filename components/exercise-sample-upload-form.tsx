@@ -446,6 +446,11 @@ export default function ExerciseSampleUploadForm({
     return `${(clamped / maxDuration) * 100}%`;
   }
 
+  function jumpToTimestamp(seconds: number | null) {
+    if (seconds === null || !Number.isFinite(seconds)) return;
+    onScrub(seconds);
+  }
+
   function renderTimestampMarkers() {
     const fallbackDuration =
       duration > 0
@@ -479,16 +484,18 @@ export default function ExerciseSampleUploadForm({
               );
             }
             return (
-              <div
+              <button
+                type="button"
                 key={`marker-${marker.label}`}
                 className="absolute -translate-x-1/2 top-0 flex flex-col items-center"
                 style={{ left: markerLeft(marker.seconds, maxDuration) }}
-                title={`${marker.label}: ${marker.seconds.toFixed(1)}s`}
+                title={`${marker.label}: ${marker.seconds.toFixed(1)}s (click to go)`}
+                onClick={() => jumpToTimestamp(marker.seconds)}
               >
                 <span className="text-[10px] leading-none text-slate-600">↑</span>
                 <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${marker.color}`} />
                 <span className="text-[10px] leading-none text-slate-600 mt-0.5">{marker.label}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -751,8 +758,11 @@ export default function ExerciseSampleUploadForm({
           {renderTimestampMarkers()}
           <div className="flex gap-2 flex-wrap">
             <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("top")}>Set Top</button>
+            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(topTs)} disabled={topTs == null}>Go Top</button>
             <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("middle")}>Set Middle</button>
+            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(middleTs)} disabled={middleTs == null}>Go Middle</button>
             <button type="button" className="btn btn-secondary" onClick={() => onSetTimestamp("bottom")}>Set Bottom</button>
+            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(bottomTs)} disabled={bottomTs == null}>Go Bottom</button>
           </div>
           <p className="text-xs meta">Top: {topTs?.toFixed(1) ?? "-"}s | Middle: {middleTs?.toFixed(1) ?? "-"}s | Bottom: {bottomTs?.toFixed(1) ?? "-"}s</p>
         </div>
@@ -798,8 +808,11 @@ export default function ExerciseSampleUploadForm({
           {renderTimestampMarkers()}
           <div className="flex gap-2 flex-wrap">
             <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("top")}>Set Top</button>
+            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(topTs)} disabled={topTs == null}>Go Top</button>
             <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("middle")}>Set Middle</button>
+            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(middleTs)} disabled={middleTs == null}>Go Middle</button>
             <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("bottom")}>Set Bottom</button>
+            <button type="button" className="btn btn-secondary" onClick={() => jumpToTimestamp(bottomTs)} disabled={bottomTs == null}>Go Bottom</button>
           </div>
           <p className="text-xs meta">Top: {topTs?.toFixed(1) ?? "-"}s | Middle: {middleTs?.toFixed(1) ?? "-"}s | Bottom: {bottomTs?.toFixed(1) ?? "-"}s</p>
         </div>
