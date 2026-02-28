@@ -390,11 +390,11 @@ details[open] > summary::after {
   display: none;
 }
 
-details[open] .exercise-read-view {
+details[data-editing="1"][open] .exercise-read-view {
   display: none;
 }
 
-details[open] .exercise-edit-view {
+details[data-editing="1"][open] .exercise-edit-view {
   display: grid;
 }
 

@@ -962,7 +962,13 @@ export default async function CoachExercisesPage({
             const detailsId = `exercise-details-${exercise.id}`;
             const formId = `exercise-edit-form-${exercise.id}`;
             return (
-            <details id={detailsId} key={exercise.id} className="metric p-3" open={isOpen}>
+            <details
+              id={detailsId}
+              key={exercise.id}
+              className="metric p-3"
+              data-editing={isEditing ? "1" : "0"}
+              open={isOpen}
+            >
               <summary className="cursor-pointer list-none">
               {(() => {
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];

@@ -31,7 +31,13 @@ export default function DetailsEditToggle({
         const details = document.getElementById(detailsId) as HTMLDetailsElement | null;
         if (!details) return;
         const next = !details.open;
-        if (!next && formId) {
+        const wasEditing = details.dataset.editing === "1";
+        if (next) {
+          details.dataset.editing = "1";
+        } else {
+          details.dataset.editing = "0";
+        }
+        if (!next && formId && wasEditing) {
           const form = document.getElementById(formId) as HTMLFormElement | null;
           form?.reset();
         }
