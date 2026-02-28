@@ -178,7 +178,6 @@ export default function ExerciseSampleUploadForm({
   const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
   const [youtubeReady, setYoutubeReady] = useState(false);
-  const [youtubePlaying, setYoutubePlaying] = useState(false);
   const linkedUrls = useMemo(() => (linkInput.trim() ? [linkInput.trim()] : []), [linkInput]);
   const hasValidLinkUrls = useMemo(() => {
     if (linkedUrls.length !== 1) return false;
@@ -326,7 +325,6 @@ export default function ExerciseSampleUploadForm({
     setMiddlePhotoUrl("");
     setBottomPhotoUrl("");
     setYoutubeReady(false);
-    setYoutubePlaying(false);
   }
 
   async function captureAndUploadFrame(slot: RepPhotoSlot) {
@@ -514,9 +512,8 @@ export default function ExerciseSampleUploadForm({
             if (d > 0) setDuration(d);
             setYoutubeReady(true);
           },
-          onStateChange: (event: any) => {
-            const state = Number(event?.data);
-            setYoutubePlaying(state === 1 || state === 3);
+          onStateChange: () => {
+            // Time sync is polled while player is ready.
           }
         }
       });
@@ -543,12 +540,11 @@ export default function ExerciseSampleUploadForm({
       youtubePlayerRef.current?.destroy?.();
       youtubePlayerRef.current = null;
       setYoutubeReady(false);
-      setYoutubePlaying(false);
     };
   }, [loadedLinkYouTubeId, videoSource]);
 
   useEffect(() => {
-    if (videoSource !== "link" || !loadedLinkYouTubeId || !youtubeReady || !youtubePlaying) return;
+    if (videoSource !== "link" || !loadedLinkYouTubeId || !youtubeReady) return;
     const id = window.setInterval(() => {
       const current = Number(youtubePlayerRef.current?.getCurrentTime?.() || 0);
       if (Number.isFinite(current)) setCursor(current);
@@ -556,7 +552,25 @@ export default function ExerciseSampleUploadForm({
       if (d > 0) setDuration(d);
     }, 250);
     return () => window.clearInterval(id);
-  }, [videoSource, loadedLinkYouTubeId, youtubeReady, youtubePlaying]);
+  }, [videoSource, loadedLinkYouTubeId, youtubeReady]);
+
+  function getLiveCursorSeconds(): number {
+    if (videoSource === "link" && loadedLinkYouTubeId && youtubePlayerRef.current?.getCurrentTime) {
+      const live = Number(youtubePlayerRef.current.getCurrentTime() || 0);
+      if (Number.isFinite(live) && live >= 0) {
+        setCursor(live);
+        return live;
+      }
+    }
+    return cursor;
+  }
+
+  function setTimestampFromLiveCursor(slot: RepPhotoSlot) {
+    const seconds = getLiveCursorSeconds();
+    if (slot === "top") setTopTs(seconds);
+    if (slot === "middle") setMiddleTs(seconds);
+    if (slot === "bottom") setBottomTs(seconds);
+  }
 
   const formContent = (
     <>
@@ -770,9 +784,9 @@ export default function ExerciseSampleUploadForm({
           </label>
           {renderTimestampMarkers()}
           <div className="flex gap-2 flex-wrap">
-            <button type="button" className="btn btn-secondary" onClick={() => setTopTs(cursor)}>Set Top</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setMiddleTs(cursor)}>Set Middle</button>
-            <button type="button" className="btn btn-secondary" onClick={() => setBottomTs(cursor)}>Set Bottom</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("top")}>Set Top</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("middle")}>Set Middle</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setTimestampFromLiveCursor("bottom")}>Set Bottom</button>
           </div>
           <p className="text-xs meta">Top: {topTs?.toFixed(1) ?? "-"}s | Middle: {middleTs?.toFixed(1) ?? "-"}s | Bottom: {bottomTs?.toFixed(1) ?? "-"}s</p>
         </div>
