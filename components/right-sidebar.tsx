@@ -17,7 +17,12 @@ import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 // NavItem now carries an optional small SVG icon element rendered beside the label
 type NavItem = { href: string; label: string; icon?: React.ReactNode };
-type Props = { role: AppRole | null; email: string | null };
+type Props = {
+  role: AppRole | null;
+  email: string | null;
+  adminCoachContextId?: string;
+  adminAthleteContextId?: string;
+};
 
 // ─── Inline SVG icon helpers (14×14, stroke-based, inherit color) ─────────────
 
@@ -124,6 +129,7 @@ const adminItems: NavItem[] = [
 
 const coachItems: NavItem[] = [
   { href: "/coach/queue", label: "Dashboard", icon: <IconGrid /> },
+  { href: "/coach/profile", label: "Profile", icon: <IconUser /> },
   { href: "/coach/review-log", label: "Review Log", icon: <IconList /> },
   { href: "/coach/new-loom-upload", label: "New Loom Video Connect", icon: <IconVideo /> },
   { href: "/coach/clients", label: "Client Profiles", icon: <IconUsers /> },
@@ -143,7 +149,12 @@ const athleteVideoReviewItems: NavItem[] = [
   { href: "/athlete/feedback", label: "Previous Feedback", icon: <IconMessageSquare /> }
 ];
 
-export default function RightSidebar({ role, email }: Props) {
+export default function RightSidebar({
+  role,
+  email,
+  adminCoachContextId = "",
+  adminAthleteContextId = ""
+}: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -157,8 +168,8 @@ export default function RightSidebar({ role, email }: Props) {
   if (hideSidebar) return null;
 
   const showAdmin = role === "admin";
-  const showCoach = role === "coach" || role === "admin";
-  const showAthlete = role === "athlete" || role === "admin";
+  const showCoach = role === "coach" || (role === "admin" && !!adminCoachContextId);
+  const showAthlete = role === "athlete" || (role === "admin" && !!adminAthleteContextId);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -221,6 +232,12 @@ export default function RightSidebar({ role, email }: Props) {
               </ul>
             </section>
           )}
+          {role === "admin" && !showCoach && (
+            <section className="sidebar-section">
+              <p className="sidebar-header">Coach</p>
+              <p className="text-xs meta">Select a coach in Admin View Context to unlock coach tabs.</p>
+            </section>
+          )}
 
           {showAthlete && (
             <section className="sidebar-section">
@@ -252,6 +269,12 @@ export default function RightSidebar({ role, email }: Props) {
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+          {role === "admin" && !showAthlete && (
+            <section className="sidebar-section">
+              <p className="sidebar-header">Athlete</p>
+              <p className="text-xs meta">Select an athlete in Admin View Context to unlock athlete tabs.</p>
             </section>
           )}
         </nav>
