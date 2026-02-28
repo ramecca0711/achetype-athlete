@@ -28,9 +28,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [coaches, setCoaches] = useState<CoachOption[]>([]);
   const [signupCoachId, setSignupCoachId] = useState("");
-  const [signupGender, setSignupGender] = useState("");
-  // Birthday and height are collected post-signup during onboarding
-  const [signupWeightLbs, setSignupWeightLbs] = useState("");
+  // Birthday, height, gender, and weight are collected post-signup during onboarding
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -98,9 +96,7 @@ export default function LoginPage() {
                 data: {
                   role: signupRole,
                   coach_id: signupRole === "athlete" ? signupCoachId : null,
-                  gender: signupGender || null,
-                  // Birthday, age, and height are collected during onboarding after account creation
-                  weight_lbs: signupWeightLbs || null,
+                  // Birthday, age, height, gender, and weight are collected during onboarding after account creation
                   // Pass approval_status in metadata so the DB trigger can write it to profiles.
                   // Coach and admin accounts start as 'pending' — an admin must approve before access.
                   approval_status: ["coach", "admin"].includes(signupRole) ? "pending" : "approved"
@@ -212,42 +208,6 @@ export default function LoginPage() {
             </>
           )}
 
-          {mode === "signup" && (
-            <>
-              <div>
-                <label className="text-sm font-medium" htmlFor="signup-gender">
-                  Gender
-                </label>
-                <select
-                  className="select mt-1"
-                  id="signup-gender"
-                  value={signupGender}
-                  onChange={(event) => setSignupGender(event.target.value)}
-                >
-                  <option value="">Select</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="non_binary">Non-binary</option>
-                  <option value="prefer_not_to_say">Prefer not to say</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium" htmlFor="signup-weight">
-                  Weight (lbs)
-                </label>
-                <input
-                  className="input mt-1"
-                  id="signup-weight"
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  value={signupWeightLbs}
-                  onChange={(event) => setSignupWeightLbs(event.target.value)}
-                />
-              </div>
-            </>
-          )}
 
           <div>
             <label className="text-sm font-medium" htmlFor="email">
