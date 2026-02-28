@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd achetype-athlete && npm run build",
-  "installCommand": "cd achetype-athlete && npm install",
-  "outputDirectory": "achetype-athlete/.next",
-  "framework": "nextjs"
-}
