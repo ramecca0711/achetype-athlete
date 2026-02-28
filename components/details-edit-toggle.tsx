@@ -4,6 +4,7 @@ import { useState } from "react";
 
 type Props = {
   detailsId: string;
+  formId?: string;
   initiallyOpen?: boolean;
   className?: string;
   editLabel?: string;
@@ -12,10 +13,11 @@ type Props = {
 
 export default function DetailsEditToggle({
   detailsId,
+  formId,
   initiallyOpen = false,
   className = "badge",
   editLabel = "Edit",
-  closeLabel = "Close"
+  closeLabel = "Cancel"
 }: Props) {
   const [open, setOpen] = useState(initiallyOpen);
 
@@ -29,6 +31,10 @@ export default function DetailsEditToggle({
         const details = document.getElementById(detailsId) as HTMLDetailsElement | null;
         if (!details) return;
         const next = !details.open;
+        if (!next && formId) {
+          const form = document.getElementById(formId) as HTMLFormElement | null;
+          form?.reset();
+        }
         details.open = next;
         setOpen(next);
       }}
@@ -37,4 +43,3 @@ export default function DetailsEditToggle({
     </button>
   );
 }
-

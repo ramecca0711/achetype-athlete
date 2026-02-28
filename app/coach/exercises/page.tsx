@@ -953,6 +953,7 @@ export default async function CoachExercisesPage({
                 {(groupedFiltered[group] ?? []).map((exercise) => {
             const isEditing = currentEditId === exercise.id;
             const detailsId = `exercise-details-${exercise.id}`;
+            const formId = `exercise-edit-form-${exercise.id}`;
             return (
             <details id={detailsId} key={exercise.id} className="metric p-3" open={isEditing}>
               <summary className="cursor-pointer list-none">
@@ -992,7 +993,7 @@ export default async function CoachExercisesPage({
                             🗑️
                           </button>
                         </form>
-                        <DetailsEditToggle detailsId={detailsId} initiallyOpen={isEditing} />
+                        <DetailsEditToggle detailsId={detailsId} formId={formId} initiallyOpen={isEditing} closeLabel="Cancel" />
                       </div>
                     </div>
                     {!!missingFields.length && (
@@ -1009,63 +1010,123 @@ export default async function CoachExercisesPage({
               })()}
               </summary>
               <div className="mt-3 space-y-3">
+              {searchParams?.edit === exercise.id && searchParams?.updated === exercise.id && (
+                <p className="text-xs text-green-700">Exercise details saved.</p>
+              )}
+              {searchParams?.edit === exercise.id && searchParams?.update_error === "save_failed" && (
+                <p className="text-xs text-red-700">Save failed: could not update exercise details.</p>
+              )}
+              {searchParams?.edit === exercise.id && searchParams?.sample_saved === "1" && (
+                <p className="text-xs text-green-700">Sample video and timestamps saved.</p>
+              )}
+              {searchParams?.edit === exercise.id && searchParams?.sample_warning === "frame_capture_unavailable" && (
+                <p className="text-xs text-amber-700">
+                  Screenshot capture unavailable for this link. Saved video/timestamps only.
+                  {searchParams?.sample_debug ? ` (debug: ${searchParams.sample_debug})` : ""}
+                </p>
+              )}
+              {searchParams?.edit === exercise.id && !!searchParams?.sample_error && (
+                <p className="text-xs text-red-700">
+                  Save failed:{" "}
+                  {searchParams.sample_error === "missing_exercise" && "exercise not selected."}
+                  {searchParams.sample_error === "missing_video" && "provide one uploaded or loaded video link."}
+                  {searchParams.sample_error === "duration_limit" && "video is longer than 3 minutes."}
+                  {searchParams.sample_error === "reference_insert_failed" && "could not save video reference row."}
+                  {searchParams.sample_error === "asset_insert_failed" && "could not save video asset row."}
+                  {searchParams.sample_error === "rep_photo_failed" && "could not save timestamp screenshot(s)."}
+                  {!["missing_exercise", "missing_video", "duration_limit", "reference_insert_failed", "asset_insert_failed", "rep_photo_failed"].includes(searchParams.sample_error) &&
+                    "unexpected error."}
+                </p>
+              )}
               {(() => {
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];
                 const latestVideo = exerciseVideos[0];
-                const leftInfoRows = [
-                  { label: "Name", value: exercise.name, missing: !exercise.name },
-                  { label: "Category", value: exercise.category, missing: !exercise.category },
-                  { label: "Group/type", value: exercise.exercise_group, missing: !exercise.exercise_group || exercise.exercise_group === "Needs Setup" },
-                  { label: "Subgroup", value: exercise.exercise_subgroup, missing: !exercise.exercise_subgroup },
-                  { label: "Structural goal", value: exercise.structural_goal, missing: !exercise.structural_goal },
-                  { label: "Cues", value: exercise.cues, missing: !exercise.cues },
-                  { label: "Purpose/impact", value: exercise.purpose_impact, missing: !exercise.purpose_impact },
-                  { label: "Where to feel", value: exercise.where_to_feel, missing: !exercise.where_to_feel },
-                  { label: "Do examples", value: exercise.dos_examples, missing: !exercise.dos_examples },
-                  { label: "Don't examples", value: exercise.donts_examples, missing: !exercise.donts_examples }
-                ];
-                const rightInfoRows = [
-                  { label: "Sample video", value: latestVideo?.loom_url ?? null, missing: exerciseVideos.length === 0 },
-                  { label: "Top timestamp", value: latestVideo?.ts_top_seconds != null ? `${latestVideo.ts_top_seconds}s` : null, missing: exerciseVideos.length > 0 && latestVideo?.ts_top_seconds == null },
-                  { label: "Middle timestamp", value: latestVideo?.ts_middle_seconds != null ? `${latestVideo.ts_middle_seconds}s` : null, missing: exerciseVideos.length > 0 && latestVideo?.ts_middle_seconds == null },
-                  { label: "Bottom timestamp", value: latestVideo?.ts_bottom_seconds != null ? `${latestVideo.ts_bottom_seconds}s` : null, missing: exerciseVideos.length > 0 && latestVideo?.ts_bottom_seconds == null }
-                ];
-
+                const missingBadge = (value: unknown) =>
+                  value === null || value === undefined || String(value).trim() === "" ? "Missing" : "";
                 return (
-                  <div className="grid md:grid-cols-2 gap-3 text-sm">
-                    <div className="space-y-2">
-                      {leftInfoRows.map((row) => {
-                        const isMissingValue =
-                          row.missing || row.value === null || row.value === undefined || String(row.value).trim() === "";
-                        return (
-                          <p key={`${exercise.id}-left-${row.label}`} className="text-slate-800">
-                            <span className="meta">{row.label}:</span>{" "}
-                            {isMissingValue ? (
-                              <span className="text-red-700 font-medium">Missing</span>
-                            ) : (
-                              row.value
-                            )}
-                          </p>
-                        );
-                      })}
-                    </div>
-                    <div className="space-y-2">
-                      {rightInfoRows.map((row) => {
-                        const isMissingValue =
-                          row.missing || row.value === null || row.value === undefined || String(row.value).trim() === "";
-                        return (
-                          <p key={`${exercise.id}-right-${row.label}`} className="text-slate-800">
-                            <span className="meta">{row.label}:</span>{" "}
-                            {isMissingValue ? (
-                              <span className="text-red-700 font-medium">Missing</span>
-                            ) : (
-                              row.value
-                            )}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <form id={formId} action={saveExerciseAndSample} className="grid md:grid-cols-2 gap-3">
+                    <input type="hidden" name="exercise_id" value={exercise.id} />
+                    <label className="text-sm block">Name
+                      <input className="input mt-1" name="name" defaultValue={exercise.name} required />
+                    </label>
+                    <label className="text-sm block">Sample video
+                      <input className="input mt-1" value={latestVideo?.loom_url ?? ""} readOnly />
+                      {!latestVideo?.loom_url && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block">Category
+                      <input className="input mt-1" name="category" defaultValue={exercise.category ?? ""} />
+                      {!!missingBadge(exercise.category) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block">Top timestamp
+                      <input className="input mt-1" value={latestVideo?.ts_top_seconds != null ? `${latestVideo.ts_top_seconds}s` : ""} readOnly />
+                      {latestVideo && latestVideo?.ts_top_seconds == null && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block">Group/type
+                      <input className="input mt-1" name="exercise_group" defaultValue={exercise.exercise_group ?? ""} required />
+                    </label>
+                    <label className="text-sm block">Middle timestamp
+                      <input className="input mt-1" value={latestVideo?.ts_middle_seconds != null ? `${latestVideo.ts_middle_seconds}s` : ""} readOnly />
+                      {latestVideo && latestVideo?.ts_middle_seconds == null && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block">Subgroup
+                      <input className="input mt-1" name="exercise_subgroup" defaultValue={exercise.exercise_subgroup ?? ""} />
+                      {!!missingBadge(exercise.exercise_subgroup) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block">Bottom timestamp
+                      <input className="input mt-1" value={latestVideo?.ts_bottom_seconds != null ? `${latestVideo.ts_bottom_seconds}s` : ""} readOnly />
+                      {latestVideo && latestVideo?.ts_bottom_seconds == null && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block md:col-span-2">Structural goal
+                      <input className="input mt-1" name="structural_goal" defaultValue={exercise.structural_goal ?? ""} />
+                      {!!missingBadge(exercise.structural_goal) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block md:col-span-2">Cues
+                      <input className="input mt-1" name="cues" defaultValue={exercise.cues ?? ""} />
+                      {!!missingBadge(exercise.cues) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block md:col-span-2">Purpose/impact
+                      <input className="input mt-1" name="purpose_impact" defaultValue={exercise.purpose_impact ?? ""} />
+                      {!!missingBadge(exercise.purpose_impact) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block md:col-span-2">Where to feel
+                      <input className="input mt-1" name="where_to_feel" defaultValue={exercise.where_to_feel ?? ""} />
+                      {!!missingBadge(exercise.where_to_feel) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block md:col-span-2">Do examples
+                      <textarea className="textarea mt-1" name="dos_examples" defaultValue={exercise.dos_examples ?? ""} />
+                      {!!missingBadge(exercise.dos_examples) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <label className="text-sm block md:col-span-2">Don&apos;t examples
+                      <textarea className="textarea mt-1" name="donts_examples" defaultValue={exercise.donts_examples ?? ""} />
+                      {!!missingBadge(exercise.donts_examples) && <span className="text-xs text-red-700">Missing</span>}
+                    </label>
+                    <h3 className="text-base font-semibold md:col-span-2">Sample Video Source (1 file or 1 link)</h3>
+                    <ExerciseSampleUploadForm
+                      fixedExerciseId={exercise.id}
+                      initialVideoUrl={latestVideo?.loom_url ?? ""}
+                      initialTopTs={latestVideo?.ts_top_seconds ?? null}
+                      initialMiddleTs={latestVideo?.ts_middle_seconds ?? null}
+                      initialBottomTs={latestVideo?.ts_bottom_seconds ?? null}
+                      exercises={(exercises ?? []).map((item) => ({
+                        id: item.id,
+                        name: item.name,
+                        category: item.category,
+                        exercise_group: item.exercise_group,
+                        exercise_subgroup: item.exercise_subgroup,
+                        structural_goal: item.structural_goal,
+                        cues: item.cues,
+                        purpose_impact: item.purpose_impact,
+                        where_to_feel: item.where_to_feel,
+                        dos_examples: item.dos_examples,
+                        donts_examples: item.donts_examples
+                      }))}
+                      action={addReferenceVideo}
+                      embeddedInParentForm
+                      hideExerciseSelect
+                      showSubmitButton={false}
+                    />
+                    <button className="btn btn-primary md:col-span-2" type="submit">Save Sample</button>
+                  </form>
                 );
               })()}
               {(() => {
@@ -1146,102 +1207,6 @@ export default async function CoachExercisesPage({
                 </div>
               )}
 
-              {isEditing && (
-                <div className="metric p-3 space-y-3">
-                  {searchParams?.edit === exercise.id && searchParams?.updated === exercise.id && (
-                    <p className="text-xs text-green-700">Exercise details saved.</p>
-                  )}
-                  {searchParams?.edit === exercise.id && searchParams?.update_error === "save_failed" && (
-                    <p className="text-xs text-red-700">Save failed: could not update exercise details.</p>
-                  )}
-                  {searchParams?.edit === exercise.id && searchParams?.sample_saved === "1" && (
-                    <p className="text-xs text-green-700">Sample video and timestamps saved.</p>
-                  )}
-                  {searchParams?.edit === exercise.id && searchParams?.sample_warning === "frame_capture_unavailable" && (
-                    <p className="text-xs text-amber-700">
-                      Screenshot capture unavailable for this link. Saved video/timestamps only.
-                      {searchParams?.sample_debug ? ` (debug: ${searchParams.sample_debug})` : ""}
-                    </p>
-                  )}
-                  {searchParams?.edit === exercise.id && !!searchParams?.sample_error && (
-                    <p className="text-xs text-red-700">
-                      Save failed:{" "}
-                      {searchParams.sample_error === "missing_exercise" && "exercise not selected."}
-                      {searchParams.sample_error === "missing_video" && "provide one uploaded or loaded video link."}
-                      {searchParams.sample_error === "duration_limit" && "video is longer than 3 minutes."}
-                      {searchParams.sample_error === "reference_insert_failed" && "could not save video reference row."}
-                      {searchParams.sample_error === "asset_insert_failed" && "could not save video asset row."}
-                      {searchParams.sample_error === "rep_photo_failed" && "could not save timestamp screenshot(s)."}
-                      {!["missing_exercise", "missing_video", "duration_limit", "reference_insert_failed", "asset_insert_failed", "rep_photo_failed"].includes(searchParams.sample_error) &&
-                        "unexpected error."}
-                    </p>
-                  )}
-                  <form action={saveExerciseAndSample} className="grid md:grid-cols-2 gap-2">
-                    <input type="hidden" name="exercise_id" value={exercise.id} />
-                    <label className="text-sm block">Exercise name
-                      <input className="input mt-1" name="name" defaultValue={exercise.name} required />
-                    </label>
-                    <label className="text-sm block">Category
-                      <input className="input mt-1" name="category" defaultValue={exercise.category ?? ""} required />
-                    </label>
-                    <label className="text-sm block">Group/type
-                      <input className="input mt-1" name="exercise_group" defaultValue={exercise.exercise_group ?? ""} required />
-                    </label>
-                    <label className="text-sm block">Subgroup
-                      <input className="input mt-1" name="exercise_subgroup" defaultValue={exercise.exercise_subgroup ?? ""} />
-                    </label>
-                    <label className="text-sm block md:col-span-2">Structural goal
-                      <input className="input mt-1" name="structural_goal" defaultValue={exercise.structural_goal ?? ""} />
-                    </label>
-                    <label className="text-sm block md:col-span-2">Cues
-                      <input className="input mt-1" name="cues" defaultValue={exercise.cues ?? ""} />
-                    </label>
-                    <label className="text-sm block md:col-span-2">Purpose/impact
-                      <input className="input mt-1" name="purpose_impact" defaultValue={exercise.purpose_impact ?? ""} />
-                    </label>
-                    <label className="text-sm block md:col-span-2">Where to feel
-                      <input className="input mt-1" name="where_to_feel" defaultValue={exercise.where_to_feel ?? ""} />
-                    </label>
-                    <label className="text-sm block md:col-span-2">Do examples
-                      <textarea className="textarea mt-1" name="dos_examples" defaultValue={exercise.dos_examples ?? ""} />
-                    </label>
-                    <label className="text-sm block md:col-span-2">Don&apos;t examples
-                      <textarea className="textarea mt-1" name="donts_examples" defaultValue={exercise.donts_examples ?? ""} />
-                    </label>
-                    <h3 className="text-base font-semibold">Sample Video Source (1 file or 1 link)</h3>
-                    {(() => {
-                      const latestVideo = (videosByExercise.get(exercise.id) ?? [])[0];
-                      return (
-                    <ExerciseSampleUploadForm
-                      fixedExerciseId={exercise.id}
-                      initialVideoUrl={latestVideo?.loom_url ?? ""}
-                      initialTopTs={latestVideo?.ts_top_seconds ?? null}
-                      initialMiddleTs={latestVideo?.ts_middle_seconds ?? null}
-                      initialBottomTs={latestVideo?.ts_bottom_seconds ?? null}
-                      exercises={(exercises ?? []).map((item) => ({
-                        id: item.id,
-                        name: item.name,
-                        category: item.category,
-                        exercise_group: item.exercise_group,
-                        exercise_subgroup: item.exercise_subgroup,
-                        structural_goal: item.structural_goal,
-                        cues: item.cues,
-                        purpose_impact: item.purpose_impact,
-                        where_to_feel: item.where_to_feel,
-                        dos_examples: item.dos_examples,
-                        donts_examples: item.donts_examples
-                      }))}
-                      action={addReferenceVideo}
-                      embeddedInParentForm
-                      hideExerciseSelect
-                      showSubmitButton={false}
-                    />
-                      );
-                    })()}
-                    <button className="btn btn-secondary md:col-span-2" type="submit">Save Sample</button>
-                  </form>
-                </div>
-              )}
               </div>
             </details>
           );

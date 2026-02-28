@@ -902,7 +902,7 @@ export default function ExerciseSampleUploadForm({
   );
 
   if (embeddedInParentForm) {
-    return <div className="grid md:grid-cols-2 gap-3 mt-3">{formContent}</div>;
+    return <div className="grid md:grid-cols-2 gap-3 mt-3 md:col-span-2">{formContent}</div>;
   }
 
   return (
