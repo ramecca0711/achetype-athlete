@@ -32,6 +32,47 @@ function getArchetypeFilterValue(structuralGoal: string | null | undefined): str
   return value.trim() ? "OTHER" : "";
 }
 
+function isDirectVideoUrl(url: string): boolean {
+  return /\.(mp4|mov|m4v|webm|ogg)(\?|$)/i.test(url) || /\/storage\/v1\/object\/public\//i.test(url);
+}
+
+function parseYouTubeId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.replace("/", "").trim() || null;
+    }
+    if (parsed.hostname.includes("youtube.com")) {
+      const v = parsed.searchParams.get("v");
+      if (v) return v;
+      const pathParts = parsed.pathname.split("/").filter(Boolean);
+      const shortsIndex = pathParts.findIndex((part) => part === "shorts");
+      if (shortsIndex >= 0 && pathParts[shortsIndex + 1]) return pathParts[shortsIndex + 1];
+      const embedIndex = pathParts.findIndex((part) => part === "embed");
+      if (embedIndex >= 0 && pathParts[embedIndex + 1]) return pathParts[embedIndex + 1];
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function toEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("loom.com")) {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const shareId = parts[parts.length - 1] ?? "";
+      if (shareId) return `https://www.loom.com/embed/${shareId}`;
+    }
+    const youtubeId = parseYouTubeId(url);
+    if (youtubeId) return `https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0`;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export default async function CoachExercisesPage({
   searchParams
 }: {
@@ -945,7 +986,7 @@ export default async function CoachExercisesPage({
               <h3 className="text-lg font-semibold">{group} ({groupedFiltered[group]?.length ?? 0})</h3>
               <div className="space-y-2">
                 {(groupedFiltered[group] ?? []).map((exercise) => {
-            const isEditing = currentEditId === exercise.id;
+            const isEditing = currentEditId === exercise.id && sampleSavedForId !== exercise.id;
             const isOpenAfterSave = searchParams?.updated === exercise.id || sampleSavedForId === exercise.id;
             const isOpen = isEditing || isOpenAfterSave;
             const detailsId = `exercise-details-${exercise.id}`;
@@ -1062,7 +1103,16 @@ export default async function CoachExercisesPage({
                         <p><span className="meta">Structural goal:</span> {isMissing(exercise.structural_goal) ? <span className="text-red-700 font-medium">Missing</span> : exercise.structural_goal}</p>
                       </div>
                       <div className="space-y-2">
-                        <p><span className="meta">Sample video:</span> {isMissing(latestVideo?.loom_url) ? <span className="text-red-700 font-medium">Missing</span> : latestVideo?.loom_url}</p>
+                        <p>
+                          <span className="meta">Sample video:</span>{" "}
+                          {isMissing(latestVideo?.loom_url) ? (
+                            <span className="text-red-700 font-medium">Missing</span>
+                          ) : (
+                            <a className="plain-link" href={latestVideo?.loom_url ?? ""} target="_blank">
+                              Open link
+                            </a>
+                          )}
+                        </p>
                         <p><span className="meta">Top timestamp:</span> {topTsText ? topTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
                         <p><span className="meta">Middle timestamp:</span> {middleTsText ? middleTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
                         <p><span className="meta">Bottom timestamp:</span> {bottomTsText ? bottomTsText : <span className="text-red-700 font-medium">Missing</span>}</p>
@@ -1168,6 +1218,8 @@ export default async function CoachExercisesPage({
                 const exerciseVideos = videosByExercise.get(exercise.id) ?? [];
                 const latestVideo = exerciseVideos[0];
                 if (!latestVideo?.loom_url) return null;
+                const embedUrl = toEmbedUrl(latestVideo.loom_url);
+                const directVideo = isDirectVideoUrl(latestVideo.loom_url);
 
                 return (
                   <div className="metric p-3">
@@ -1180,6 +1232,28 @@ export default async function CoachExercisesPage({
                         {latestVideo.loom_url}
                       </a>
                     </p>
+                    <div className="mt-2 border rounded bg-white overflow-hidden">
+                      {directVideo ? (
+                        <video
+                          className="w-full h-[240px] object-contain bg-black"
+                          controls
+                          preload="metadata"
+                          src={latestVideo.loom_url}
+                        />
+                      ) : embedUrl ? (
+                        <iframe
+                          src={embedUrl}
+                          className="w-full h-[240px] bg-black"
+                          allow="autoplay; encrypted-media; picture-in-picture"
+                          allowFullScreen
+                          title={`${exercise.name} sample preview`}
+                        />
+                      ) : (
+                        <div className="p-3 text-xs meta">
+                          Preview unavailable for this link type.
+                        </div>
+                      )}
+                    </div>
                     <div className="mt-3 grid md:grid-cols-3 gap-2">
                       {([
                         { key: "top", label: "Top frame", ts: latestVideo.ts_top_seconds },
