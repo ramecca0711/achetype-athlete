@@ -49,7 +49,6 @@ type Props = {
 };
 
 const MAX_VIDEOS = 1;
-const MAX_DURATION_SECONDS = 180;
 const IMAGE_ACCEPT = "image/*";
 
 function formatBytes(bytes: number): string {
@@ -211,10 +210,7 @@ export default function ExerciseSampleUploadForm({
 
     try {
       for (const file of selected) {
-        const seconds = await getVideoDuration(file);
-        if (seconds > MAX_DURATION_SECONDS) {
-          throw new Error(`${file.name} is longer than 3 minutes.`);
-        }
+        await getVideoDuration(file);
       }
       setFiles(selected);
       setUploadedVideos([]);
@@ -250,11 +246,6 @@ export default function ExerciseSampleUploadForm({
     for (let i = 0; i < files.length; i += 1) {
       const file = files[i];
       const seconds = await getVideoDuration(file);
-      if (seconds > MAX_DURATION_SECONDS) {
-        setUploading(false);
-        setError(`${file.name} is longer than 3 minutes.`);
-        return;
-      }
 
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
       const safeExt = ext.replace(/[^a-z0-9]/g, "") || "mp4";
@@ -655,7 +646,7 @@ export default function ExerciseSampleUploadForm({
 
         {videoSource === "upload" && (
           <div className="mt-2">
-            <p className="text-xs meta">Upload 1 video (max 3 minutes).</p>
+            <p className="text-xs meta">Upload 1 video.</p>
             <input className="input mt-2" type="file" accept="video/*" onChange={onPickFiles} />
             {!!files[0] && (
               <p className="text-xs meta mt-1">Selected: {files[0].name} ({formatBytes(files[0].size)})</p>

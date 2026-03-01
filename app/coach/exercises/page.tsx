@@ -128,9 +128,6 @@ export default async function CoachExercisesPage({
     };
 
     if (exerciseId && hasSample) {
-      if (sampleDurations.some((seconds) => Number(seconds) > 180)) {
-        redirect("/coach/exercises?sample_error=duration_limit");
-      }
 
       const { data: latestExisting } = await sb
         .from("exercise_reference_videos")
@@ -329,10 +326,6 @@ export default async function CoachExercisesPage({
 
     if (!Array.isArray(sampleUrls) || sampleUrls.length !== 1) {
       redirect(`/coach/exercises?edit=${exerciseId}&sample_error=missing_video`);
-    }
-
-    if (sampleDurations.some((seconds) => Number(seconds) > 180)) {
-      redirect(`/coach/exercises?edit=${exerciseId}&sample_error=duration_limit`);
     }
 
     const { data: latestExisting } = await sb
@@ -556,10 +549,6 @@ export default async function CoachExercisesPage({
 
     if (!Array.isArray(sampleUrls) || sampleUrls.length !== 1) {
       redirect(`/coach/exercises?edit=${exerciseId}&sample_error=missing_video`);
-    }
-
-    if (sampleDurations.some((seconds) => Number(seconds) > 180)) {
-      redirect(`/coach/exercises?edit=${exerciseId}&sample_error=duration_limit`);
     }
 
     const { data: latestExisting } = await sb
@@ -1043,11 +1032,10 @@ export default async function CoachExercisesPage({
                   Save failed:{" "}
                   {searchParams.sample_error === "missing_exercise" && "exercise not selected."}
                   {searchParams.sample_error === "missing_video" && "provide one uploaded or loaded video link."}
-                  {searchParams.sample_error === "duration_limit" && "video is longer than 3 minutes."}
                   {searchParams.sample_error === "reference_insert_failed" && "could not save video reference row."}
                   {searchParams.sample_error === "asset_insert_failed" && "could not save video asset row."}
                   {searchParams.sample_error === "rep_photo_failed" && "could not save timestamp screenshot(s)."}
-                  {!["missing_exercise", "missing_video", "duration_limit", "reference_insert_failed", "asset_insert_failed", "rep_photo_failed"].includes(searchParams.sample_error) &&
+                  {!["missing_exercise", "missing_video", "reference_insert_failed", "asset_insert_failed", "rep_photo_failed"].includes(searchParams.sample_error) &&
                     "unexpected error."}
                 </p>
               )}
