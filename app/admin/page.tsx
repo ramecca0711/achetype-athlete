@@ -31,7 +31,7 @@ async function assertAdmin() {
 export default async function AdminPage({
   searchParams
 }: {
-  searchParams?: { edit_assignment?: string; deleted?: string; delete_error?: string };
+  searchParams?: { edit_assignment?: string; deleted?: string; delete_error?: string; survey_tab?: string };
 }) {
   const supabase = createSupabaseServer();
   const {
@@ -156,6 +156,10 @@ export default async function AdminPage({
     revalidatePath("/admin");
   }
 
+  const cookieStore = await cookies();
+  const selectedCoachId = cookieStore.get("admin_view_coach_id")?.value ?? "";
+  const selectedAthleteId = cookieStore.get("admin_view_athlete_id")?.value ?? "";
+
   const [
     { data: profiles },
     { data: athletes },
@@ -181,12 +185,10 @@ export default async function AdminPage({
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "coach"),
     supabase.from("exercise_submissions").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
     // Pending approval queue: coach and admin accounts not yet approved
-    supabase.from("profiles").select("id, full_name, email, role, member_since").in("role", ["coach", "admin"]).eq("approval_status", "pending").order("created_at", { ascending: true })
+    supabase.from("profiles").select("id, full_name, email, role, member_since").in("role", ["coach", "admin"]).eq("approval_status", "pending").order("created_at", { ascending: true }),
   ]);
 
-  const cookieStore = await cookies();
-  const selectedCoachId = cookieStore.get("admin_view_coach_id")?.value ?? "";
-  const selectedAthleteId = cookieStore.get("admin_view_athlete_id")?.value ?? "";
+  const activeSurveyTab = searchParams?.survey_tab === "coach" ? "coach" : "athlete";
 
   return (
     <main className="shell space-y-4">
@@ -234,6 +236,169 @@ export default async function AdminPage({
             <button className="btn btn-primary" type="submit">Save View Context</button>
           </div>
         </form>
+      </section>
+
+      <section className="card p-6">
+        <h2 className="text-2xl">Survey Preview</h2>
+        <p className="meta mt-1">Design preview of new account survey forms.</p>
+
+        {/* Tab navigation */}
+        <div className="flex mt-4 border-b border-gray-200">
+          <Link
+            href="/admin?survey_tab=athlete"
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeSurveyTab === "athlete" ? "border-[#bd9256] text-[#bd9256]" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+          >
+            Athlete Survey
+          </Link>
+          <Link
+            href="/admin?survey_tab=coach"
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeSurveyTab === "coach" ? "border-[#bd9256] text-[#bd9256]" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+          >
+            Coach Survey
+          </Link>
+        </div>
+
+        {activeSurveyTab === "athlete" ? (
+          /* Athlete Onboarding Survey — static blank preview matching /onboarding */
+          <div className="mt-5 max-w-3xl">
+            <div className="card p-6">
+              <p className="badge inline-block">Athlete Onboarding</p>
+              <h3 className="text-3xl mt-3">Welcome</h3>
+              <p className="meta mt-2">
+                Complete your intro survey and upload 4 posture photos (front, back, left, right). You can skip and update later in profile.
+              </p>
+              <fieldset disabled className="space-y-3 mt-5">
+                <label className="text-sm block">
+                  Full Name
+                  <input className="input mt-1" placeholder="Jane Smith" />
+                </label>
+                <label className="text-sm block">
+                  Training Experience
+                  <input className="input mt-1" placeholder="Beginner / Intermediate / Advanced" />
+                </label>
+                <label className="text-sm block">
+                  Weekly Training Days
+                  <input className="input mt-1" type="number" min={1} max={7} />
+                </label>
+                <label className="text-sm block">
+                  Gender
+                  <select className="select mt-1">
+                    <option value="">Select</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="non_binary">Non-binary</option>
+                    <option value="prefer_not_to_say">Prefer not to say</option>
+                  </select>
+                </label>
+                <label className="text-sm block">
+                  Birthday
+                  <input className="input mt-1" type="date" />
+                </label>
+                <label className="text-sm block">
+                  Units
+                  <select className="select mt-1">
+                    <option value="imperial">Imperial (ft/in, lbs)</option>
+                    <option value="metric">Metric (cm, kg)</option>
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-sm block">
+                    Height (ft)
+                    <input className="input mt-1" type="number" min={0} step="1" />
+                  </label>
+                  <label className="text-sm block">
+                    Height (in)
+                    <input className="input mt-1" type="number" min={0} step="0.1" />
+                  </label>
+                </div>
+                <label className="text-sm block">
+                  Height (cm, for metric)
+                  <input className="input mt-1" type="number" min={0} step="0.1" />
+                </label>
+                <label className="text-sm block">
+                  Weight (lbs, for imperial)
+                  <input className="input mt-1" type="number" min={0} step="0.1" />
+                </label>
+                <label className="text-sm block">
+                  Weight (kg, for metric)
+                  <input className="input mt-1" type="number" min={0} step="0.1" />
+                </label>
+                <label className="text-sm block">
+                  Goals (comma separated)
+                  <input className="input mt-1" placeholder="Strength, posture, shoulder stability" />
+                </label>
+                <label className="text-sm block">
+                  Injuries
+                  <textarea className="textarea mt-1" />
+                </label>
+                <label className="text-sm block">
+                  Imbalances / Notes
+                  <textarea className="textarea mt-1" />
+                </label>
+                <label className="text-sm block">
+                  Additional Intro Notes
+                  <textarea className="textarea mt-1" />
+                </label>
+                <label className="text-sm block">
+                  Public Review Board Visibility
+                  <select className="select mt-1">
+                    <option value="private">Private (do not auto-share my requests/notifications)</option>
+                    <option value="public">Public (share my requests/notifications on Public Review Board)</option>
+                  </select>
+                </label>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {(["front", "back", "left", "right"] as const).map((slot) => (
+                    <div key={slot} className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                      <p className="text-sm font-medium capitalize text-gray-500">{slot} photo</p>
+                      <p className="text-xs meta mt-1">Upload area</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 flex-wrap pt-2">
+                  <button className="btn btn-primary" type="button">Submit Onboarding</button>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        ) : (
+          /* Coach Onboarding Survey — static blank preview matching /coach/onboarding */
+          <div className="mt-5 max-w-3xl">
+            <div className="card p-6">
+              <p className="badge inline-block">Coach Onboarding</p>
+              <h3 className="text-3xl mt-3">Complete Your Coach Setup</h3>
+              <p className="meta mt-2">
+                This one-time questionnaire appears after approval. You can edit this information later in Coach Profile.
+              </p>
+              <fieldset disabled className="space-y-3 mt-5">
+                <label className="text-sm block">
+                  Full Name
+                  <input className="input mt-1" placeholder="Coach Name" />
+                </label>
+                <label className="text-sm block">
+                  Gender
+                  <select className="select mt-1">
+                    <option value="">Select</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="non_binary">Non-binary</option>
+                    <option value="prefer_not_to_say">Prefer not to say</option>
+                  </select>
+                </label>
+                <label className="text-sm block">
+                  Birthday
+                  <input className="input mt-1" type="date" />
+                </label>
+                <label className="text-sm block">
+                  Setup Notes
+                  <textarea className="textarea mt-1" />
+                </label>
+                <div className="pt-2">
+                  <button className="btn btn-primary" type="button">Complete Coach Setup</button>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="card p-6">

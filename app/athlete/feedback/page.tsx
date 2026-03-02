@@ -23,7 +23,7 @@ export default async function AthleteFeedbackPage() {
   const scopedAthleteId = me?.role === "admin" ? cookieStore.get("admin_view_athlete_id")?.value || "" : user.id;
   if (me?.role === "admin" && !scopedAthleteId) redirect("/admin");
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", scopedAthleteId).maybeSingle();
+  const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", scopedAthleteId).maybeSingle();
   if (profile?.role !== "athlete" && me?.role !== "admin") redirect("/");
   const feedbackScoreLabel = (score: number | null | undefined) => {
     if (score === 5) return "There";
@@ -53,12 +53,14 @@ export default async function AthleteFeedbackPage() {
     .eq("status", "resolved")
     .order("created_at", { ascending: false });
 
-  const { data: feedbackRows } = await supabase
+  let feedbackQuery = supabase
     .from("exercise_feedback_log")
     .select("exercise_id, client_name, feedback_date, feedback_text, exercise:exercises(name)")
     .order("feedback_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(200);
+  if (profile?.full_name) feedbackQuery = feedbackQuery.eq("client_name", profile.full_name);
+  const { data: feedbackRows } = await feedbackQuery;
 
   const latestFeedbackByExerciseName = new Map<string, { text: string; client: string; date: string }>();
   for (const row of feedbackRows ?? []) {
