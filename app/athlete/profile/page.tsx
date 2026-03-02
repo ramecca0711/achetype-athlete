@@ -17,6 +17,13 @@ import PosturePhotoInput from "@/components/posture-photo-input";
 type Slot = "front" | "back" | "left" | "right";
 const slots: Slot[] = ["front", "back", "left", "right"];
 
+function parseNumber(value: FormDataEntryValue | null): number | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export default async function AthleteProfilePage({
   searchParams
 }: {
@@ -57,6 +64,14 @@ export default async function AthleteProfilePage({
 
   const photoMap = new Map((photos ?? []).map((p) => [p.photo_slot, p.photo_url]));
   const uploadedPhotoCount = slots.filter((slot) => !!photoMap.get(slot)).length;
+  const existingHeightInches = Number(profile?.height_inches ?? 0) || 0;
+  const existingWeightLbs = Number(profile?.weight_lbs ?? 0) || 0;
+  const defaultFeet = existingHeightInches > 0 ? Math.floor(existingHeightInches / 12) : "";
+  const defaultInchesPart = existingHeightInches > 0 ? Number((existingHeightInches % 12).toFixed(1)) : "";
+  const defaultHeightCm = existingHeightInches > 0 ? Number((existingHeightInches * 2.54).toFixed(1)) : "";
+  const defaultWeightKg = existingWeightLbs > 0 ? Number((existingWeightLbs / 2.2046226218).toFixed(1)) : "";
+  const readHeightFeet = existingHeightInches > 0 ? Math.floor(existingHeightInches / 12) : null;
+  const readHeightInchesPart = existingHeightInches > 0 ? Number((existingHeightInches % 12).toFixed(1)) : null;
 
   async function saveProfile(formData: FormData) {
     "use server";
@@ -103,6 +118,22 @@ export default async function AthleteProfilePage({
                 : 0)
           )
         : null;
+    const measurementUnit = String(formData.get("measurement_unit") ?? "imperial").trim() === "metric" ? "metric" : "imperial";
+    const heightFeet = parseNumber(formData.get("height_feet"));
+    const heightInchesPart = parseNumber(formData.get("height_inches_part"));
+    const heightCm = parseNumber(formData.get("height_cm"));
+    const weightLbsInput = parseNumber(formData.get("weight_lbs_input"));
+    const weightKg = parseNumber(formData.get("weight_kg"));
+    const resolvedHeightInches =
+      measurementUnit === "metric"
+        ? (heightCm && heightCm > 0 ? Number((heightCm / 2.54).toFixed(2)) : null)
+        : (((heightFeet ?? 0) * 12 + (heightInchesPart ?? 0)) > 0
+            ? Number((((heightFeet ?? 0) * 12 + (heightInchesPart ?? 0))).toFixed(2))
+            : null);
+    const resolvedWeightLbs =
+      measurementUnit === "metric"
+        ? (weightKg && weightKg > 0 ? Number((weightKg * 2.2046226218).toFixed(2)) : null)
+        : (weightLbsInput && weightLbsInput > 0 ? Number(weightLbsInput.toFixed(2)) : null);
 
     const hasAllFour = photoInputs.every((i) => !!i.url);
     const { data: existingProfile } = await sb
@@ -126,8 +157,8 @@ export default async function AthleteProfilePage({
       gender: String(formData.get("gender") ?? "") || null,
       birth_date: birthDateRaw || null,
       age: calculatedAge,
-      height_inches: Number(formData.get("height_inches") ?? 0) || null,
-      weight_lbs: Number(formData.get("weight_lbs") ?? 0) || null,
+      height_inches: resolvedHeightInches,
+      weight_lbs: resolvedWeightLbs,
       share_feedback_publicly: String(formData.get("share_feedback_publicly") ?? "private") === "public",
       posture_photos_required: !hasAllFour
     };
@@ -268,11 +299,28 @@ export default async function AthleteProfilePage({
                   <p>Calculated age</p>
                   <p className="input mt-1 bg-slate-50">{profile?.age ?? "-"}</p>
                 </div>
-                <label className="text-sm block">Height (inches)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="height_inches" defaultValue={profile?.height_inches ?? ""} />
+                <label className="text-sm block">Units
+                  <select className="select mt-1" name="measurement_unit" defaultValue="imperial">
+                    <option value="imperial">Imperial (ft/in, lbs)</option>
+                    <option value="metric">Metric (cm, kg)</option>
+                  </select>
                 </label>
-                <label className="text-sm block">Weight (lbs)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="weight_lbs" defaultValue={profile?.weight_lbs ?? ""} />
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-sm block">Height (ft)
+                    <input className="input mt-1" type="number" min={0} step="1" name="height_feet" defaultValue={defaultFeet} />
+                  </label>
+                  <label className="text-sm block">Height (in)
+                    <input className="input mt-1" type="number" min={0} step="0.1" name="height_inches_part" defaultValue={defaultInchesPart} />
+                  </label>
+                </div>
+                <label className="text-sm block">Height (cm, for metric)
+                  <input className="input mt-1" type="number" min={0} step="0.1" name="height_cm" defaultValue={defaultHeightCm} />
+                </label>
+                <label className="text-sm block">Weight (lbs, for imperial)
+                  <input className="input mt-1" type="number" min={0} step="0.1" name="weight_lbs_input" defaultValue={profile?.weight_lbs ?? ""} />
+                </label>
+                <label className="text-sm block">Weight (kg, for metric)
+                  <input className="input mt-1" type="number" min={0} step="0.1" name="weight_kg" defaultValue={defaultWeightKg} />
                 </label>
               </div>
             </section>
@@ -343,7 +391,7 @@ export default async function AthleteProfilePage({
                 <p><span className="meta">Gender:</span> {profile?.gender ?? "-"}</p>
                 <p><span className="meta">Birthday:</span> {profile?.birth_date ?? "-"}</p>
                 <p><span className="meta">Age:</span> {profile?.age ?? "-"}</p>
-                <p><span className="meta">Height:</span> {profile?.height_inches ?? "-"} in</p>
+                <p><span className="meta">Height:</span> {readHeightFeet != null && readHeightInchesPart != null ? `${readHeightFeet} ft ${readHeightInchesPart} in` : "-"}</p>
                 <p><span className="meta">Weight:</span> {profile?.weight_lbs ?? "-"} lbs</p>
               </div>
             </section>

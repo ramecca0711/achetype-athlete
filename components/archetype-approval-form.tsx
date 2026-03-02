@@ -31,6 +31,42 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
+function isDirectVideoUrl(url: string): boolean {
+  return /\.(mp4|mov|m4v|webm|ogg)(\?|$)/i.test(url) || /\/storage\/v1\/object\/public\//i.test(url);
+}
+
+function parseYouTubeId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.replace("/", "").trim() || null;
+    }
+    if (parsed.hostname.includes("youtube.com")) {
+      const v = parsed.searchParams.get("v");
+      if (v) return v;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function toEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("loom.com")) {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const shareId = parts[parts.length - 1] ?? "";
+      if (shareId) return `https://www.loom.com/embed/${shareId}`;
+    }
+    const youtubeId = parseYouTubeId(url);
+    if (youtubeId) return `https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0`;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export default function ArchetypeApprovalForm({
   athleteId,
   fullName,
@@ -69,6 +105,7 @@ export default function ArchetypeApprovalForm({
   }, [hasMeasurements, numericShoulder, numericHip]);
   const [selectedArchetype, setSelectedArchetype] = useState<ArchetypeKind>(initialSuggestion);
   const [manualOverride, setManualOverride] = useState(false);
+  const [editingFeedbackLink, setEditingFeedbackLink] = useState(!postureFeedbackLoomUrl);
 
   const aiSuggestion = useMemo(() => {
     if (!hasMeasurements) return null;
@@ -137,6 +174,10 @@ export default function ArchetypeApprovalForm({
     event.stopPropagation();
     setDragIndex(index);
   }
+
+  const savedFeedbackUrl = String(postureFeedbackLoomUrl ?? "").trim();
+  const savedFeedbackEmbedUrl = savedFeedbackUrl ? toEmbedUrl(savedFeedbackUrl) : null;
+  const showReadFeedbackPreview = !!savedFeedbackUrl && !editingFeedbackLink;
 
   return (
     <form action={action} className="border rounded-xl p-3 bg-white space-y-3">
@@ -253,16 +294,55 @@ export default function ArchetypeApprovalForm({
         </div>
       </div>
 
-      <label className="text-sm block">
-        Posture Photo Feedback Loom Link
-        <input
-          className="input mt-1"
-          type="url"
-          name="posture_feedback_loom_url"
-          defaultValue={postureFeedbackLoomUrl ?? ""}
-          placeholder="https://www.loom.com/share/..."
-        />
-      </label>
+      <div className="border rounded-lg p-3 bg-slate-50">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">Posture Photo Feedback Loom Link</p>
+          {showReadFeedbackPreview && (
+            <button
+              type="button"
+              className="badge"
+              aria-label="Edit posture feedback link"
+              title="Edit posture feedback link"
+              onClick={() => setEditingFeedbackLink(true)}
+            >
+              ✏️
+            </button>
+          )}
+        </div>
+        {showReadFeedbackPreview ? (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm">
+              <a className="plain-link" href={savedFeedbackUrl} target="_blank">Open Link</a>
+            </p>
+            <div className="border rounded overflow-hidden bg-white">
+              {isDirectVideoUrl(savedFeedbackUrl) ? (
+                <video className="w-full h-[240px] object-contain bg-black" controls preload="metadata" src={savedFeedbackUrl} />
+              ) : savedFeedbackEmbedUrl ? (
+                <iframe
+                  src={savedFeedbackEmbedUrl}
+                  className="w-full h-[240px] bg-black"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  title={`${fullName} posture feedback preview`}
+                />
+              ) : (
+                <div className="p-3 text-xs meta">Preview unavailable for this link type.</div>
+              )}
+            </div>
+            <input type="hidden" name="posture_feedback_loom_url" value={savedFeedbackUrl} readOnly />
+          </div>
+        ) : (
+          <label className="text-sm block mt-2">
+            <input
+              className="input mt-1"
+              type="url"
+              name="posture_feedback_loom_url"
+              defaultValue={postureFeedbackLoomUrl ?? ""}
+              placeholder="https://www.loom.com/share/..."
+            />
+          </label>
+        )}
+      </div>
 
       <input type="hidden" name="shoulder_width" value={hasMeasurements ? String(numericShoulder) : ""} readOnly />
       <input type="hidden" name="hip_width" value={hasMeasurements ? String(numericHip) : ""} readOnly />
@@ -273,9 +353,11 @@ export default function ArchetypeApprovalForm({
         </p>
       )}
 
-      <button className="btn btn-primary" type="submit" disabled={!hasMeasurements}>
-        Generate + Approve Archetype
-      </button>
+      {!showReadFeedbackPreview && (
+        <button className="btn btn-primary" type="submit" disabled={!hasMeasurements}>
+          {savedFeedbackUrl ? "Submit Changes" : "Generate + Approve Archetype"}
+        </button>
+      )}
     </form>
   );
 }
