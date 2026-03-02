@@ -254,7 +254,7 @@ export default async function AdminPage({
 
       <section className="card p-6">
         <h2 className="text-2xl">Survey Preview</h2>
-        <p className="meta mt-1">Read-only preview of the selected athlete's intro survey responses.</p>
+        <p className="meta mt-1">Read-only preview of the selected athlete&apos;s intro survey responses.</p>
 
         {!selectedAthleteId ? (
           <p className="meta text-sm mt-4">Select an athlete in Admin View Context above to preview their survey.</p>
