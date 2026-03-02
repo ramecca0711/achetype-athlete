@@ -31,7 +31,7 @@ async function assertAdmin() {
 export default async function AdminPage({
   searchParams
 }: {
-  searchParams?: { edit_assignment?: string; deleted?: string; delete_error?: string };
+  searchParams?: { edit_assignment?: string; deleted?: string; delete_error?: string; survey_tab?: string };
 }) {
   const supabase = createSupabaseServer();
   const {
@@ -156,6 +156,10 @@ export default async function AdminPage({
     revalidatePath("/admin");
   }
 
+  const cookieStore = await cookies();
+  const selectedCoachId = cookieStore.get("admin_view_coach_id")?.value ?? "";
+  const selectedAthleteId = cookieStore.get("admin_view_athlete_id")?.value ?? "";
+
   const [
     { data: profiles },
     { data: athletes },
@@ -165,7 +169,9 @@ export default async function AdminPage({
     { count: coachCount },
     { count: pendingCount },
     // Fetch coach/admin accounts that are awaiting approval
-    { data: pendingApprovals }
+    { data: pendingApprovals },
+    { data: surveyProfile },
+    { data: surveyPhotos }
   ] = await Promise.all([
     // Include approval_status so the User Roles table can show pending state
     supabase.from("profiles").select("id, full_name, email, role, member_since, approval_status").order("created_at", { ascending: false }),
@@ -181,12 +187,22 @@ export default async function AdminPage({
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "coach"),
     supabase.from("exercise_submissions").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
     // Pending approval queue: coach and admin accounts not yet approved
-    supabase.from("profiles").select("id, full_name, email, role, member_since").in("role", ["coach", "admin"]).eq("approval_status", "pending").order("created_at", { ascending: true })
+    supabase.from("profiles").select("id, full_name, email, role, member_since").in("role", ["coach", "admin"]).eq("approval_status", "pending").order("created_at", { ascending: true }),
+    // Survey preview: fetch selected athlete's full profile data
+    selectedAthleteId
+      ? supabase.from("profiles").select("full_name, training_experience, weekly_training_days, goals, injuries, imbalances, intro_survey_notes, gender, birth_date, age, height_inches, weight_lbs, share_feedback_publicly").eq("id", selectedAthleteId).maybeSingle()
+      : Promise.resolve({ data: null }) as any,
+    // Survey preview: fetch selected athlete's posture photos
+    selectedAthleteId
+      ? supabase.from("posture_photos").select("photo_slot, photo_url").eq("athlete_id", selectedAthleteId)
+      : Promise.resolve({ data: [] }) as any,
   ]);
 
-  const cookieStore = await cookies();
-  const selectedCoachId = cookieStore.get("admin_view_coach_id")?.value ?? "";
-  const selectedAthleteId = cookieStore.get("admin_view_athlete_id")?.value ?? "";
+  const activeSurveyTab = searchParams?.survey_tab === "photos" ? "photos" : "survey";
+  const surveyHeightInches = Number((surveyProfile as any)?.height_inches ?? 0) || 0;
+  const surveyFeet = surveyHeightInches > 0 ? Math.floor(surveyHeightInches / 12) : null;
+  const surveyInchPart = surveyHeightInches > 0 ? Number((surveyHeightInches % 12).toFixed(1)) : null;
+  const surveyPhotoMap = new Map(((surveyPhotos ?? []) as any[]).map((p) => [p.photo_slot, p.photo_url]));
 
   return (
     <main className="shell space-y-4">
@@ -234,6 +250,160 @@ export default async function AdminPage({
             <button className="btn btn-primary" type="submit">Save View Context</button>
           </div>
         </form>
+      </section>
+
+      <section className="card p-6">
+        <h2 className="text-2xl">Survey Preview</h2>
+        <p className="meta mt-1">Read-only preview of the selected athlete's intro survey responses.</p>
+
+        {!selectedAthleteId ? (
+          <p className="meta text-sm mt-4">Select an athlete in Admin View Context above to preview their survey.</p>
+        ) : (
+          <>
+            {/* Tab navigation */}
+            <div className="flex mt-4 border-b border-gray-200">
+              <Link
+                href="/admin?survey_tab=survey"
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeSurveyTab === "survey" ? "border-[#bd9256] text-[#bd9256]" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                Onboarding Survey
+              </Link>
+              <Link
+                href="/admin?survey_tab=photos"
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${activeSurveyTab === "photos" ? "border-[#bd9256] text-[#bd9256]" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                Profile Survey
+              </Link>
+            </div>
+
+            {activeSurveyTab === "survey" ? (
+              /* Tab 1: Onboarding Survey — form-style layout matching the onboarding page */
+              <div className="mt-5 max-w-2xl">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+                  <p className="badge inline-block">Athlete Onboarding</p>
+                </div>
+                <h3 className="text-xl">Welcome{(surveyProfile as any)?.full_name ? `, ${(surveyProfile as any).full_name}` : ""}</h3>
+                <p className="meta text-sm mt-1 mb-4">Intro survey and posture photo upload.</p>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-sm">Full Name</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.full_name || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Training Experience</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.training_experience || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Weekly Training Days</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.weekly_training_days ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Gender</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.gender || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Birthday</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.birth_date || "-"}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-sm">Height (ft)</p>
+                      <p className="input mt-1 bg-slate-50">{surveyFeet ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm">Height (in)</p>
+                      <p className="input mt-1 bg-slate-50">{surveyInchPart ?? "-"}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm">Weight (lbs)</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.weight_lbs ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Goals (comma separated)</p>
+                    <p className="input mt-1 bg-slate-50">{((surveyProfile as any)?.goals ?? []).join(", ") || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Injuries</p>
+                    <p className="textarea mt-1 bg-slate-50 whitespace-pre-line">{(surveyProfile as any)?.injuries || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Imbalances / Notes</p>
+                    <p className="textarea mt-1 bg-slate-50 whitespace-pre-line">{(surveyProfile as any)?.imbalances || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Additional Intro Notes</p>
+                    <p className="textarea mt-1 bg-slate-50 whitespace-pre-line">{(surveyProfile as any)?.intro_survey_notes || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Public Review Board Visibility</p>
+                    <p className="input mt-1 bg-slate-50">{(surveyProfile as any)?.share_feedback_publicly ? "Public" : "Private"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm">Posture Photos</p>
+                    <p className="input mt-1 bg-slate-50">{["front", "back", "left", "right"].filter((s) => !!surveyPhotoMap.get(s)).length} / 4 uploaded</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Tab 2: Profile Survey — sectioned layout matching the athlete profile page */
+              <div className="space-y-4 mt-5">
+                <section className="border rounded-xl p-4 bg-white">
+                  <h3 className="text-xl">Basic Info</h3>
+                  <div className="grid md:grid-cols-2 gap-3 mt-3 text-sm">
+                    <p><span className="meta">Name:</span> {(surveyProfile as any)?.full_name ?? "-"}</p>
+                    <p><span className="meta">Gender:</span> {(surveyProfile as any)?.gender ?? "-"}</p>
+                    <p><span className="meta">Birthday:</span> {(surveyProfile as any)?.birth_date ?? "-"}</p>
+                    <p><span className="meta">Age:</span> {(surveyProfile as any)?.age ?? "-"}</p>
+                    <p><span className="meta">Height:</span> {surveyFeet != null ? `${surveyFeet} ft ${surveyInchPart} in` : "-"}</p>
+                    <p><span className="meta">Weight:</span> {(surveyProfile as any)?.weight_lbs ?? "-"} lbs</p>
+                  </div>
+                </section>
+
+                <section className="border rounded-xl p-4 bg-white">
+                  <h3 className="text-xl">Training Profile</h3>
+                  <div className="space-y-2 mt-3 text-sm">
+                    <p><span className="meta">Experience:</span> {(surveyProfile as any)?.training_experience ?? "-"}</p>
+                    <p><span className="meta">Days/week:</span> {(surveyProfile as any)?.weekly_training_days ?? "-"}</p>
+                    <p><span className="meta">Goals:</span> {((surveyProfile as any)?.goals ?? []).length ? ((surveyProfile as any)?.goals ?? []).join(", ") : "-"}</p>
+                    <p><span className="meta">Public review board:</span> {(surveyProfile as any)?.share_feedback_publicly ? "Public" : "Private"}</p>
+                  </div>
+                </section>
+
+                <section className="border rounded-xl p-4 bg-white">
+                  <h3 className="text-xl">Injuries And Notes</h3>
+                  <div className="space-y-2 mt-3 text-sm">
+                    <p><span className="meta">Injuries:</span> {(surveyProfile as any)?.injuries ?? "-"}</p>
+                    <p><span className="meta">Imbalances:</span> {(surveyProfile as any)?.imbalances ?? "-"}</p>
+                    <p><span className="meta">Intro notes:</span> {(surveyProfile as any)?.intro_survey_notes ?? "-"}</p>
+                  </div>
+                </section>
+
+                <section className="border rounded-xl p-4 bg-white">
+                  <h3 className="text-xl">Posture Photos</h3>
+                  <div className="grid md:grid-cols-2 gap-3 mt-3">
+                    {(["front", "back", "left", "right"] as const).map((slot) => {
+                      const url = surveyPhotoMap.get(slot);
+                      return (
+                        <div key={slot} className="border rounded-xl p-3">
+                          <p className="text-sm font-medium capitalize">{slot}</p>
+                          {url ? (
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="block mt-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`${slot} posture`} className="w-full rounded-lg object-cover" style={{ maxHeight: "200px" }} />
+                            </a>
+                          ) : (
+                            <p className="meta text-sm mt-1">Not uploaded</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       <section className="card p-6">
