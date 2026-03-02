@@ -11,7 +11,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import PosturePhotoInput from "@/components/posture-photo-input";
+import AthleteOnboardingFields from "@/components/athlete-onboarding-fields";
 
 type Slot = "front" | "back" | "left" | "right";
 const slots: Slot[] = ["front", "back", "left", "right"];
@@ -50,13 +50,6 @@ export default async function OnboardingPage() {
   if (profile?.onboarding_completed) {
     redirect("/athlete");
   }
-
-  const existingHeightInches = Number(profile?.height_inches ?? 0) || 0;
-  const existingWeightLbs = Number(profile?.weight_lbs ?? 0) || 0;
-  const defaultFeet = existingHeightInches > 0 ? Math.floor(existingHeightInches / 12) : "";
-  const defaultInchesPart = existingHeightInches > 0 ? Number((existingHeightInches % 12).toFixed(1)) : "";
-  const defaultHeightCm = existingHeightInches > 0 ? Number((existingHeightInches * 2.54).toFixed(1)) : "";
-  const defaultWeightKg = existingWeightLbs > 0 ? Number((existingWeightLbs / 2.2046226218).toFixed(1)) : "";
 
   async function submitOnboarding(formData: FormData) {
     "use server";
@@ -198,104 +191,7 @@ export default async function OnboardingPage() {
         </p>
 
         <form action={submitOnboarding} className="space-y-3 mt-5">
-          <label className="text-sm block">
-            Full Name
-            <input className="input mt-1" name="full_name" defaultValue={profile?.full_name ?? ""} required />
-          </label>
-
-          <label className="text-sm block">
-            Training Experience
-            <input className="input mt-1" name="training_experience" defaultValue={profile?.training_experience ?? ""} placeholder="Beginner / Intermediate / Advanced" />
-          </label>
-
-          <label className="text-sm block">
-            Weekly Training Days
-            <input className="input mt-1" type="number" min={1} max={7} name="weekly_training_days" defaultValue={profile?.weekly_training_days ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Gender
-            <select className="select mt-1" name="gender" defaultValue={profile?.gender ?? ""}>
-              <option value="">Select</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="non_binary">Non-binary</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </select>
-          </label>
-
-          <label className="text-sm block">
-            Birthday
-            <input className="input mt-1" type="date" name="birth_date" defaultValue={profile?.birth_date ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Units
-            <select className="select mt-1" name="measurement_unit" defaultValue="imperial">
-              <option value="imperial">Imperial (ft/in, lbs)</option>
-              <option value="metric">Metric (cm, kg)</option>
-            </select>
-          </label>
-
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-sm block">
-              Height (ft)
-              <input className="input mt-1" type="number" min={0} step="1" name="height_feet" defaultValue={defaultFeet} />
-            </label>
-            <label className="text-sm block">
-              Height (in)
-              <input className="input mt-1" type="number" min={0} step="0.1" name="height_inches_part" defaultValue={defaultInchesPart} />
-            </label>
-          </div>
-
-          <label className="text-sm block">
-            Height (cm, for metric)
-            <input className="input mt-1" type="number" min={0} step="0.1" name="height_cm" defaultValue={defaultHeightCm} />
-          </label>
-
-          <label className="text-sm block">
-            Weight (lbs, for imperial)
-            <input className="input mt-1" type="number" min={0} step="0.1" name="weight_lbs_input" defaultValue={profile?.weight_lbs ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Weight (kg, for metric)
-            <input className="input mt-1" type="number" min={0} step="0.1" name="weight_kg" defaultValue={defaultWeightKg} />
-          </label>
-
-          <label className="text-sm block">
-            Goals (comma separated)
-            <input className="input mt-1" name="goals" defaultValue={(profile?.goals ?? []).join(", ")} placeholder="Strength, posture, shoulder stability" />
-          </label>
-
-          <label className="text-sm block">
-            Injuries
-            <textarea className="textarea mt-1" name="injuries" defaultValue={profile?.injuries ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Imbalances / Notes
-            <textarea className="textarea mt-1" name="imbalances" defaultValue={profile?.imbalances ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Additional Intro Notes
-            <textarea className="textarea mt-1" name="intro_survey_notes" defaultValue={profile?.intro_survey_notes ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Public Review Board Visibility
-            <select className="select mt-1" name="share_feedback_publicly" defaultValue={profile?.share_feedback_publicly ? "public" : "private"}>
-              <option value="private">Private (do not auto-share my requests/notifications)</option>
-              <option value="public">Public (share my requests/notifications on Public Review Board)</option>
-            </select>
-          </label>
-
-          <div className="grid md:grid-cols-2 gap-3">
-            {slots.map((slot) => (
-              <PosturePhotoInput key={slot} athleteId={user.id} slot={slot} />
-            ))}
-          </div>
+          <AthleteOnboardingFields defaults={profile ?? undefined} athleteId={user.id} />
 
           <div className="flex gap-2 flex-wrap pt-2">
             <button className="btn btn-primary" type="submit">
