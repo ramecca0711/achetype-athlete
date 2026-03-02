@@ -31,7 +31,11 @@ function dedupe(values: string[]): string[] {
 type ParsedDay = {
   title: string;
   notes: string | null;
-  exercises: string[];
+  exercises: Array<{
+    name: string;
+    instruction: string | null;
+    supersetLabel: string | null;
+  }>;
 };
 
 function cleanExerciseName(line: string): string {
@@ -41,99 +45,122 @@ function cleanExerciseName(line: string): string {
     .trim();
 }
 
-function parseProgramStructure(raw: string): ParsedDay[] {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function isInstructionLine(line: string): boolean {
+  return /\b(reps?|tempo|sec|seconds?|mins?|minutes?|breath|cycles?|hold|only|side|lbs?|kg|@|rest)\b/i.test(line);
+}
+
+function parseProgramLinesWithSupersets(rawLines: string[]): ParsedDay[] {
+  const lines = rawLines
+    .map((line) => decodeHtmlEntities(line).replace(/\s+/g, " ").trim())
     .filter(Boolean);
 
   if (!lines.length) return [];
 
   const dayHeaderRegex =
-    /^(day\s*\d+|week\s*\d+\s*day\s*\d+|week\s*\d+|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+    /^(day\s*\d+|week\s*\d+\s*day\s*\d+|week\s*\d+|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+\s+[A-Za-z])/i;
+  const noiseRegex =
+    /^(format:|print$|dismiss$|previous stats$|exercise$|instructions$|regular workout$|repeat new set$|notes on following segment:|created by\b|last updated\b|est\.\s*\d+\s*minutes?)$/i;
+  const supersetRegex = /^superset of\b/i;
 
   const days: ParsedDay[] = [];
   let current: ParsedDay | null = null;
+  let pendingExercise: string | null = null;
+  let currentSuperset: string | null = null;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    const isHeader = dayHeaderRegex.test(line);
-
-    if (isHeader) {
-      if (current) days.push(current);
-      current = { title: line, notes: null, exercises: [] };
-      continue;
-    }
-
-    const exercise = cleanExerciseName(line);
-    if (!exercise) continue;
-
+  const flushPending = () => {
+    if (!pendingExercise) return;
     if (!current) current = { title: "Day 1", notes: null, exercises: [] };
-    current.exercises.push(exercise);
-  }
-
-  if (current) days.push(current);
-  return days;
-}
-
-function parseTrainerizeProgramStructure(raw: string): ParsedDay[] {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  const headerRegex = /^\d+\s+[A-Za-z][A-Za-z0-9 ,&()\/\-\+]+$/;
-  const headerExclude = /(weeks?\s*\(|2\/\d+\/\d+|of\s+\d+|minutes?|regular workout|tracking sheet|exercise name)/i;
-  const noiseRegex =
-    /^(format:|print$|dismiss$|previous stats$|exercise$|instructions$|repeat new set$|rest for\b|superset of\b|notes on following segment:|▶+)$/i;
-
-  const dayMap = new Map<string, ParsedDay>();
-  let currentKey = "";
-
-  const ensureDay = (title: string) => {
-    const key = title.toLowerCase();
-    if (!dayMap.has(key)) {
-      dayMap.set(key, { title: `Day ${dayMap.size + 1} - ${title}`, notes: null, exercises: [] });
-    }
-    currentKey = key;
+    current.exercises.push({
+      name: cleanExerciseName(pendingExercise),
+      instruction: null,
+      supersetLabel: currentSuperset
+    });
+    pendingExercise = null;
   };
 
   for (const line of lines) {
-    if (noiseRegex.test(line)) continue;
-    if (line.startsWith("http")) continue;
-    if (/^--\s*\d+\s+of\s+\d+\s*--$/i.test(line)) continue;
-    if (/^\d+\/\d+$/.test(line)) continue;
+    if (noiseRegex.test(line) || /^https?:\/\//i.test(line) || /^--\s*\d+\s+of\s+\d+\s*--$/i.test(line)) continue;
 
-    if (headerRegex.test(line) && !headerExclude.test(line) && line.length <= 60) {
-      ensureDay(line);
+    if (dayHeaderRegex.test(line) && !supersetRegex.test(line) && line.length <= 90) {
+      flushPending();
+      if (current) days.push(current);
+      current = { title: line, notes: null, exercises: [] };
+      currentSuperset = null;
       continue;
     }
 
-    if (!currentKey) continue;
-
-    let candidate = line;
-    if (line.includes("\t")) {
-      candidate = line.split("\t")[0]?.trim() ?? line;
-    } else if (line.includes(" reps x ")) {
-      candidate = line.split(" reps x ")[0]?.trim() ?? line;
+    if (supersetRegex.test(line)) {
+      flushPending();
+      currentSuperset = line;
+      continue;
     }
 
-    candidate = cleanExerciseName(candidate);
-
-    if (!candidate) continue;
-    if (candidate.length < 3 || candidate.length > 90) continue;
-    if (/^(name|date|set\s*\d+|reps?|lbs?|kg|previous stats)$/i.test(candidate)) continue;
-    if (!/[a-z]/i.test(candidate)) continue;
-    if (/(created by|last updated|short on time\?|in this phase|the stack|tracking sheet|exercise name)/i.test(candidate)) continue;
-
-    const day = dayMap.get(currentKey);
-    if (!day) continue;
-    if (!day.exercises.some((existing) => existing.toLowerCase() === candidate.toLowerCase())) {
-      day.exercises.push(candidate);
+    if (/^repeat new set$/i.test(line)) {
+      flushPending();
+      currentSuperset = null;
+      continue;
     }
+
+    const cleaned = cleanExerciseName(line);
+    if (!cleaned || cleaned.length < 2) continue;
+
+    if (!pendingExercise) {
+      pendingExercise = cleaned;
+      continue;
+    }
+
+    if (isInstructionLine(cleaned)) {
+      if (!current) current = { title: "Day 1", notes: null, exercises: [] };
+      current.exercises.push({
+        name: cleanExerciseName(pendingExercise),
+        instruction: cleaned,
+        supersetLabel: currentSuperset
+      });
+      pendingExercise = null;
+      continue;
+    }
+
+    if (!current) current = { title: "Day 1", notes: null, exercises: [] };
+    current.exercises.push({
+      name: cleanExerciseName(pendingExercise),
+      instruction: null,
+      supersetLabel: currentSuperset
+    });
+    pendingExercise = cleaned;
   }
 
-  return Array.from(dayMap.values()).filter((day) => day.exercises.length > 0);
+  flushPending();
+  if (current) days.push(current);
+  return days.filter((day) => day.exercises.length > 0);
+}
+
+function parseProgramStructure(raw: string): ParsedDay[] {
+  return parseProgramLinesWithSupersets(raw.split(/\r?\n/));
+}
+
+function parseTrainerizeProgramStructure(raw: string): ParsedDay[] {
+  return parseProgramLinesWithSupersets(raw.split(/\r?\n/));
+}
+
+function parseHtmlProgramStructure(rawHtml: string): ParsedDay[] {
+  const withoutScripts = rawHtml
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const withBreaks = withoutScripts
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|td|th|h1|h2|h3|h4|h5|h6|section|article)>/gi, "\n");
+  const plain = withBreaks.replace(/<[^>]+>/g, " ");
+  return parseProgramLinesWithSupersets(plain.split(/\r?\n/));
 }
 
 function extractExerciseNamesFromText(raw: string): string[] {
@@ -162,6 +189,47 @@ async function extractPdfTextFromBuffer(buffer: Buffer): Promise<string> {
   const pdfParse = ((pdfParseImport as any).default ?? pdfParseImport) as (data: Buffer) => Promise<{ text?: string }>;
   const parsed = await pdfParse(buffer);
   return (parsed?.text ?? "").trim();
+}
+
+async function extractHtmlFromSource(
+  sb: ReturnType<typeof createSupabaseServer>,
+  sourceHtmlPath: string,
+  sourceHtmlUrl: string
+): Promise<string> {
+  const parseAttempts: string[] = [];
+
+  if (sourceHtmlPath) {
+    const { data, error } = await sb.storage.from("program-imports").download(sourceHtmlPath);
+    if (!error && data) {
+      try {
+        const text = Buffer.from(await data.arrayBuffer()).toString("utf-8").trim();
+        if (text) return text;
+        parseAttempts.push("storage-html-empty");
+      } catch (error) {
+        parseAttempts.push(
+          `storage-html-failed:${error instanceof Error ? error.message.slice(0, 50) : "unknown"}`
+        );
+      }
+    } else {
+      parseAttempts.push(`storage-download-failed:${error?.message?.slice(0, 50) ?? "unknown"}`);
+    }
+  }
+
+  if (sourceHtmlUrl) {
+    try {
+      const response = await fetch(sourceHtmlUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Failed to download HTML (${response.status})`);
+      const text = (await response.text()).trim();
+      if (text) return text;
+      parseAttempts.push("url-html-empty");
+    } catch (error) {
+      parseAttempts.push(
+        `url-html-failed:${error instanceof Error ? error.message.slice(0, 50) : "unknown"}`
+      );
+    }
+  }
+
+  throw new Error(`No HTML source available (${parseAttempts.join(",") || "none"})`);
 }
 
 function inferProgramImportPathFromUrl(sourcePdfUrl: string): string {
@@ -269,16 +337,22 @@ export default async function CoachClientsPage({
     const sourceUrl = String(formData.get("source_url") ?? "").trim();
     const sourcePdfUrl = String(formData.get("source_pdf_url") ?? "").trim();
     const sourcePdfPath = String(formData.get("source_pdf_path") ?? "").trim();
+    const sourceHtmlUrl = String(formData.get("source_html_url") ?? "").trim();
+    const sourceHtmlPath = String(formData.get("source_html_path") ?? "").trim();
     const customProgramName = String(formData.get("program_name") ?? "").trim();
     let parsedExerciseNames: string[] = [];
     let parsedDaysFromText: ParsedDay[] = [];
     let extractedPdfText = "";
+    let extractedHtmlText = "";
     let pdfParseFailed = false;
+    let htmlParseFailed = false;
     let pdfParseDebug = "";
+    let htmlParseDebug = "";
 
     if (!athleteId) redirect("/coach/clients?load_error=missing_athlete");
     if (sourceType === "trainerize_link" && !sourceUrl) redirect(`/coach/clients?load_error=missing_source_url&loaded=${athleteId}`);
     if (sourceType === "pdf_upload" && !sourcePdfUrl) redirect(`/coach/clients?load_error=missing_pdf&loaded=${athleteId}`);
+    if (sourceType === "html_upload" && !sourceHtmlUrl) redirect(`/coach/clients?load_error=missing_html&loaded=${athleteId}`);
 
     if (sourceType === "pdf_upload") {
       try {
@@ -289,12 +363,26 @@ export default async function CoachClientsPage({
         }
         parsedExerciseNames = dedupe(
           parsedDaysFromText.length
-            ? parsedDaysFromText.flatMap((day) => day.exercises)
+            ? parsedDaysFromText.flatMap((day) => day.exercises.map((entry) => entry.name))
             : extractExerciseNamesFromText(extractedPdfText)
         );
       } catch (error) {
         pdfParseFailed = true;
         pdfParseDebug = error instanceof Error ? error.message.slice(0, 120) : "pdf_extract_failed";
+      }
+    }
+    if (sourceType === "html_upload") {
+      try {
+        extractedHtmlText = await extractHtmlFromSource(sb, sourceHtmlPath, sourceHtmlUrl);
+        parsedDaysFromText = parseHtmlProgramStructure(extractedHtmlText);
+        parsedExerciseNames = dedupe(
+          parsedDaysFromText.length
+            ? parsedDaysFromText.flatMap((day) => day.exercises.map((entry) => entry.name))
+            : extractExerciseNamesFromText(extractedHtmlText)
+        );
+      } catch (error) {
+        htmlParseFailed = true;
+        htmlParseDebug = error instanceof Error ? error.message.slice(0, 120) : "html_extract_failed";
       }
     }
 
@@ -329,18 +417,23 @@ export default async function CoachClientsPage({
       programSummary = sourceCopyLines.join("\n");
       firstDayNotes = "Loaded from Trainerize source. Confirm imported structure and add exercises.";
     } else {
-      programName = programName || "PDF Imported Program";
+      programName = programName || (sourceType === "html_upload" ? "HTML Imported Program" : "PDF Imported Program");
       sourceCopyLines = [
         "Program copy from uploaded source",
-        "Source type: PDF upload",
-        `Source file: ${sourcePdfUrl}`,
+        `Source type: ${sourceType === "html_upload" ? "HTML upload" : "PDF upload"}`,
+        `Source file: ${sourceType === "html_upload" ? sourceHtmlUrl : sourcePdfUrl}`,
         pdfParseFailed ? "PDF text parse failed; loaded source-only shell for manual coach completion." : "",
-        parsedDaysFromText.length ? `Detected ${parsedDaysFromText.length} day sections from PDF.` : "No day sections detected from PDF.",
-        parsedExerciseNames.length ? `Extracted ${parsedExerciseNames.length} exercise names from PDF.` : "No exercise names detected from PDF.",
+        htmlParseFailed ? "HTML parse failed; loaded source-only shell for manual coach completion." : "",
+        parsedDaysFromText.length
+          ? `Detected ${parsedDaysFromText.length} day sections from source.`
+          : "No day sections detected from source.",
+        parsedExerciseNames.length
+          ? `Extracted ${parsedExerciseNames.length} exercise names from source.`
+          : "No exercise names detected from source.",
         ...parsedExerciseNames.slice(0, 30).map((name) => `- ${name}`)
       ].filter(Boolean);
       programSummary = sourceCopyLines.join("\n");
-      firstDayNotes = "Loaded from uploaded PDF. Confirm plan details and add exercises.";
+      firstDayNotes = `Loaded from uploaded ${sourceType === "html_upload" ? "HTML" : "PDF"}. Confirm plan details and add exercises.`;
     }
 
     const { data: program } = await sb
@@ -362,7 +455,11 @@ export default async function CoachClientsPage({
               {
                 title: firstDayTitle,
                 notes: firstDayNotes,
-                exercises: parsedExerciseNames
+                exercises: parsedExerciseNames.map((name) => ({
+                  name,
+                  instruction: null,
+                  supersetLabel: null
+                }))
               }
             ];
 
@@ -371,39 +468,30 @@ export default async function CoachClientsPage({
         (existingExercises ?? []).map((exercise) => [exercise.name.trim().toLowerCase(), exercise])
       );
 
-      async function resolveExerciseIds(names: string[]): Promise<string[]> {
-        const resolvedIds: string[] = [];
+      async function resolveExerciseId(exerciseName: string): Promise<string | null> {
+        const key = exerciseName.toLowerCase();
+        const existing = existingByLower.get(key);
+        if (existing?.id) return existing.id;
 
-        for (const exerciseName of names) {
-          const key = exerciseName.toLowerCase();
-          const existing = existingByLower.get(key);
+        const { data: inserted } = await sb
+          .from("exercises")
+          .insert({
+            name: exerciseName,
+            exercise_group: "Needs Setup",
+            cues: null,
+            purpose_impact: null,
+            where_to_feel: null,
+            dos_examples: null,
+            donts_examples: null
+          })
+          .select("id, name")
+          .single();
 
-          if (existing?.id) {
-            resolvedIds.push(existing.id);
-            continue;
-          }
-
-          const { data: inserted } = await sb
-            .from("exercises")
-            .insert({
-              name: exerciseName,
-              exercise_group: "Needs Setup",
-              cues: null,
-              purpose_impact: null,
-              where_to_feel: null,
-              dos_examples: null,
-              donts_examples: null
-            })
-            .select("id, name")
-            .single();
-
-          if (inserted?.id) {
-            existingByLower.set(inserted.name.trim().toLowerCase(), inserted);
-            resolvedIds.push(inserted.id);
-          }
+        if (inserted?.id) {
+          existingByLower.set(inserted.name.trim().toLowerCase(), inserted);
+          return inserted.id;
         }
-
-        return resolvedIds;
+        return null;
       }
 
       for (let dayIndex = 0; dayIndex < daysToCreate.length; dayIndex += 1) {
@@ -421,19 +509,27 @@ export default async function CoachClientsPage({
 
         if (!day?.id) continue;
 
-        const dayExerciseNames =
+        const dayExerciseEntries =
           dayDef.exercises.length > 0
             ? dayDef.exercises
             : dayIndex === 0
-              ? parsedExerciseNames
+              ? parsedExerciseNames.map((name) => ({
+                  name,
+                  instruction: null,
+                  supersetLabel: null
+                }))
               : [];
-        const resolvedIds = await resolveExerciseIds(dayExerciseNames);
-
-        for (let i = 0; i < resolvedIds.length; i += 1) {
+        for (let i = 0; i < dayExerciseEntries.length; i += 1) {
+          const entry = dayExerciseEntries[i];
+          const exerciseId = await resolveExerciseId(entry.name);
+          if (!exerciseId) continue;
           await sb.from("program_day_exercises").insert({
             program_day_id: day.id,
-            exercise_id: resolvedIds[i],
+            exercise_id: exerciseId,
             position: i + 1,
+            rep_target: entry.instruction || null,
+            focus: entry.supersetLabel ? `SS: ${entry.supersetLabel}` : null,
+            personal_notes: entry.instruction || null,
             prescription: "reps_weight"
           });
         }
@@ -442,7 +538,11 @@ export default async function CoachClientsPage({
 
     redirect(
       `/coach/clients?loaded=${athleteId}&source=${encodeURIComponent(sourceType)}${
-        pdfParseFailed ? `&load_warning=pdf_parse_failed&load_debug=${encodeURIComponent(pdfParseDebug)}` : ""
+        pdfParseFailed
+          ? `&load_warning=pdf_parse_failed&load_debug=${encodeURIComponent(pdfParseDebug)}`
+          : htmlParseFailed
+            ? `&load_warning=html_parse_failed&load_debug=${encodeURIComponent(htmlParseDebug)}`
+            : ""
       }`
     );
   }
@@ -600,12 +700,24 @@ export default async function CoachClientsPage({
                     />
                     {searchParams?.loaded === athlete.id && searchParams?.source && !searchParams?.load_error && (
                       <p className="text-xs text-green-700 mt-2">
-                        Program loaded from {searchParams.source === "pdf_upload" ? "PDF upload" : "Trainerize link"}.
+                        Program loaded from {
+                          searchParams.source === "pdf_upload"
+                            ? "PDF upload"
+                            : searchParams.source === "html_upload"
+                              ? "HTML upload"
+                              : "Trainerize link"
+                        }.
                       </p>
                     )}
                     {searchParams?.loaded === athlete.id && searchParams?.load_warning === "pdf_parse_failed" && (
                       <p className="text-xs text-amber-700 mt-2">
                         PDF text parsing was limited. Program shell loaded; fill missing details in exercise database/client profile.
+                        {searchParams?.load_debug ? ` (debug: ${searchParams.load_debug})` : ""}
+                      </p>
+                    )}
+                    {searchParams?.loaded === athlete.id && searchParams?.load_warning === "html_parse_failed" && (
+                      <p className="text-xs text-amber-700 mt-2">
+                        HTML parsing was limited. Program shell loaded; fill missing details in exercise database/client profile.
                         {searchParams?.load_debug ? ` (debug: ${searchParams.load_debug})` : ""}
                       </p>
                     )}
@@ -615,8 +727,9 @@ export default async function CoachClientsPage({
                         {searchParams.load_error === "missing_athlete" && "select athlete first."}
                         {searchParams.load_error === "missing_source_url" && "add a Trainerize source link."}
                         {searchParams.load_error === "missing_pdf" && "upload a PDF first."}
+                        {searchParams.load_error === "missing_html" && "upload an HTML file first."}
                         {searchParams.load_error === "no_relationship" && "athlete is not assigned to this coach."}
-                        {!["missing_athlete", "missing_source_url", "missing_pdf", "no_relationship"].includes(searchParams.load_error) &&
+                        {!["missing_athlete", "missing_source_url", "missing_pdf", "missing_html", "no_relationship"].includes(searchParams.load_error) &&
                           "unexpected error."}
                       </p>
                     )}

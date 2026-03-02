@@ -26,11 +26,13 @@ type Props = {
 
 export default function ProgramLoadForm({ athletes = [], fixedAthleteId, fixedAthleteLabel, action }: Props) {
   const supabase = useMemo(() => createSupabaseBrowser(), []);
-  const [sourceType, setSourceType] = useState<"trainerize_link" | "pdf_upload">("trainerize_link");
+  const [sourceType, setSourceType] = useState<"trainerize_link" | "pdf_upload" | "html_upload">("trainerize_link");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
   const [pdfPath, setPdfPath] = useState("");
+  const [htmlUrl, setHtmlUrl] = useState("");
+  const [htmlPath, setHtmlPath] = useState("");
 
   async function onPdfSelected(event: React.ChangeEvent<HTMLInputElement>) {
     setUploadError("");
@@ -70,6 +72,48 @@ export default function ProgramLoadForm({ athletes = [], fixedAthleteId, fixedAt
     const { data } = supabase.storage.from("program-imports").getPublicUrl(path);
     setPdfUrl(data.publicUrl);
     setPdfPath(path);
+    setUploading(false);
+  }
+
+  async function onHtmlSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    setUploadError("");
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    const isHtmlMime = file.type.includes("html");
+    if (!isHtmlMime && !lowerName.endsWith(".html") && !lowerName.endsWith(".htm")) {
+      setUploadError("Please upload an HTML file.");
+      return;
+    }
+
+    setUploading(true);
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
+      setUploadError("You must be signed in to upload an HTML file.");
+      setUploading(false);
+      return;
+    }
+
+    const extension = lowerName.endsWith(".htm") ? "htm" : "html";
+    const path = `${user.id}/program-import-${Date.now()}.${extension}`;
+
+    const { error: uploadErrorResult } = await supabase.storage
+      .from("program-imports")
+      .upload(path, file, { upsert: true, cacheControl: "3600", contentType: "text/html" });
+
+    if (uploadErrorResult) {
+      setUploadError(uploadErrorResult.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from("program-imports").getPublicUrl(path);
+    setHtmlUrl(data.publicUrl);
+    setHtmlPath(path);
     setUploading(false);
   }
 
@@ -122,6 +166,16 @@ export default function ProgramLoadForm({ athletes = [], fixedAthleteId, fixedAt
           />
           PDF Upload
         </label>
+        <label className="text-sm flex items-center gap-2">
+          <input
+            type="radio"
+            name="source_type"
+            value="html_upload"
+            checked={sourceType === "html_upload"}
+            onChange={() => setSourceType("html_upload")}
+          />
+          HTML Upload
+        </label>
       </div>
 
       {sourceType === "trainerize_link" ? (
@@ -135,7 +189,7 @@ export default function ProgramLoadForm({ athletes = [], fixedAthleteId, fixedAt
             required
           />
         </label>
-      ) : (
+      ) : sourceType === "pdf_upload" ? (
         <div className="space-y-2">
           <label className="text-sm block">
             Upload Program PDF
@@ -154,9 +208,36 @@ export default function ProgramLoadForm({ athletes = [], fixedAthleteId, fixedAt
           <input type="hidden" name="source_pdf_url" value={pdfUrl} readOnly />
           <input type="hidden" name="source_pdf_path" value={pdfPath} readOnly />
         </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-sm block">
+            Upload Program HTML
+            <input className="input mt-1" type="file" accept=".html,.htm,text/html" onChange={onHtmlSelected} />
+          </label>
+          {uploading && <p className="text-xs text-blue-700">Uploading HTML...</p>}
+          {uploadError && <p className="text-xs text-red-700">{uploadError}</p>}
+          {htmlUrl && (
+            <p className="text-xs">
+              HTML uploaded:{" "}
+              <a className="underline text-blue-700" href={htmlUrl} target="_blank">
+                Open
+              </a>
+            </p>
+          )}
+          <input type="hidden" name="source_html_url" value={htmlUrl} readOnly />
+          <input type="hidden" name="source_html_path" value={htmlPath} readOnly />
+        </div>
       )}
 
-      <button className="btn btn-primary" type="submit" disabled={uploading || (sourceType === "pdf_upload" && !pdfUrl)}>
+      <button
+        className="btn btn-primary"
+        type="submit"
+        disabled={
+          uploading ||
+          (sourceType === "pdf_upload" && !pdfUrl) ||
+          (sourceType === "html_upload" && !htmlUrl)
+        }
+      >
         Load Program
       </button>
     </form>

@@ -153,6 +153,145 @@ export default async function AthleteDayPage({ params }: DayPageProps) {
         .order("submitted_at", { ascending: false })
     : { data: [] as any[] };
 
+  const groupedRows: Array<{ kind: "single" | "superset"; label: string; rows: any[] }> = [];
+  for (const row of rows ?? []) {
+    const focusValue = String(row.focus ?? "");
+    const supersetLabel = /^SS:\s*/i.test(focusValue) ? focusValue.replace(/^SS:\s*/i, "").trim() : "";
+    if (!supersetLabel) {
+      groupedRows.push({ kind: "single", label: "", rows: [row] });
+      continue;
+    }
+    const last = groupedRows[groupedRows.length - 1];
+    if (last && last.kind === "superset" && last.label.toLowerCase() === supersetLabel.toLowerCase()) {
+      last.rows.push(row);
+    } else {
+      groupedRows.push({ kind: "superset", label: supersetLabel, rows: [row] });
+    }
+  }
+
+  function renderExerciseCard(row: any, compact = false) {
+    const exercise = Array.isArray(row.exercise) ? row.exercise[0] : row.exercise;
+    const history = (submissions ?? []).filter((item) => item.program_day_exercise_id === row.id);
+    const isTime = row.prescription === "time";
+    const isMixed = row.prescription === "mixed";
+    const displayFocus = /^SS:\s*/i.test(String(row.focus ?? ""))
+      ? String(row.focus ?? "").replace(/^SS:\s*/i, "").trim()
+      : row.focus;
+
+    return (
+      <section key={row.id} className={compact ? "border rounded-xl p-4 bg-white" : "card p-6"}>
+        <div className="flex gap-2 flex-wrap">
+          <span className="badge">Exercise {row.position}</span>
+          <span className="badge">{row.prescription}</span>
+          <span className="badge">{exercise?.exercise_group ?? "General"}</span>
+        </div>
+        <h2 className="text-3xl mt-3">{exercise?.name}</h2>
+        <div className="grid md:grid-cols-4 gap-2 mt-3 text-sm">
+          <div className="metric"><p className="meta">Sets</p><p className="font-semibold">{row.set_count ?? "-"}</p></div>
+          <div className="metric"><p className="meta">Reps</p><p className="font-semibold">{row.rep_target ?? "-"}</p></div>
+          <div className="metric"><p className="meta">Weight</p><p className="font-semibold">{row.weight_target_lbs ?? "-"}</p></div>
+          <div className="metric"><p className="meta">Time</p><p className="font-semibold">{row.time_target_seconds ?? "-"}</p></div>
+        </div>
+        <p className="text-sm mt-3"><span className="font-semibold">Focus:</span> {displayFocus ?? "-"}</p>
+        <p className="text-sm mt-1"><span className="font-semibold">Purpose/Impact:</span> {exercise?.purpose_impact ?? "-"}</p>
+        <p className="text-sm mt-1"><span className="font-semibold">Where to feel:</span> {exercise?.where_to_feel ?? "-"}</p>
+        <p className="text-sm mt-1"><span className="font-semibold">Do:</span> {row.dos ?? "-"}</p>
+        <p className="text-sm mt-1"><span className="font-semibold">Don&apos;t:</span> {row.donts ?? "-"}</p>
+        <p className="text-sm mt-1"><span className="font-semibold">Personal notes:</span> {row.personal_notes ?? "-"}</p>
+
+        <form action={submitExercise} className="mt-4 border rounded-xl p-4 bg-white">
+          <input type="hidden" name="program_day_exercise_id" value={row.id} />
+          <h3 className="text-xl">Submit Video + Notes</h3>
+          <p className="text-sm meta mt-1">
+            Smart guidance only: fill the fields that match this exercise prescription.
+          </p>
+
+          <div className="grid md:grid-cols-3 gap-3 mt-3">
+            <label className="text-sm">
+              Reps Completed {(isTime && !isMixed) ? "(usually optional)" : "(recommended)"}
+              <input className="input mt-1" type="number" name="reps_completed" />
+            </label>
+            <label className="text-sm">
+              Weight (lbs) {(isTime && !isMixed) ? "(usually optional)" : "(recommended)"}
+              <input className="input mt-1" type="number" step="0.1" name="weight_lbs" />
+            </label>
+            <label className="text-sm">
+              Time (seconds) {(isTime || isMixed) ? "(recommended)" : "(usually optional)"}
+              <input className="input mt-1" type="number" name="time_seconds" />
+            </label>
+          </div>
+
+          <label className="text-sm block mt-3">
+            Confidence Score (1-5)
+            <select className="select mt-1" name="confidence_score" defaultValue="3">
+              {Object.entries(confidencePhrases).map(([score, phrase]) => (
+                <option key={score} value={score}>
+                  {score} - {phrase}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm block mt-3">
+            Loom Link
+            <input className="input mt-1" type="url" name="loom_url" placeholder="https://www.loom.com/share/..." />
+          </label>
+
+          <label className="text-sm block mt-3">
+            Your Note
+            <textarea className="textarea mt-1" name="athlete_note" />
+          </label>
+          <label className="text-sm block mt-3">
+            Bot Suggested Note (editable)
+            <textarea className="textarea mt-1" name="ai_note_suggestion" />
+          </label>
+          <label className="text-sm mt-2 inline-flex items-center gap-2">
+            <input type="checkbox" name="athlete_approved_note" /> Approve bot note for submission
+          </label>
+
+          <button type="submit" className="btn btn-primary mt-4">
+            Submit to Gunther Queue
+          </button>
+        </form>
+
+        <div className="mt-4">
+          <h3 className="text-xl">Past Submissions</h3>
+          {!history.length && <p className="meta mt-2">No submissions yet.</p>}
+          <div className="space-y-2 mt-2">
+            {history.map((item) => (
+              <details key={item.id} className={`border rounded-xl p-3 status-${item.status}`} open={false}>
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-wrap gap-2 items-center text-sm">
+                    <span className="badge">
+                      {statusLabel[(item.status ?? "pending_review") as keyof typeof statusLabel]}
+                    </span>
+                    <span className="badge">
+                      {item.confidence_score} - {confidencePhrases[(item.confidence_score ?? 3) as 1 | 2 | 3 | 4 | 5]}
+                    </span>
+                    <span className="badge">{new Date(item.submitted_at).toLocaleDateString()}</span>
+                  </div>
+                </summary>
+                <div className="mt-2">
+                  <p className="text-sm">
+                    Reps: {item.reps_completed ?? "-"} | Weight: {item.weight_lbs ?? "-"} | Time: {item.time_seconds ?? "-"}
+                  </p>
+                  {!!item.loom_url && (
+                    <a href={item.loom_url} target="_blank" className="text-blue-700 underline text-sm mt-1 inline-block">
+                      Open Link
+                    </a>
+                  )}
+                  {item.feedback?.[0] && (
+                    <p className="text-sm mt-1"><span className="font-semibold">Most recent feedback:</span> {item.feedback[0].high_level_feedback}</p>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <main className="shell space-y-4">
       <section className="card p-6">
@@ -160,125 +299,20 @@ export default async function AthleteDayPage({ params }: DayPageProps) {
         {day.notes && <p className="meta mt-2">{day.notes}</p>}
       </section>
 
-      {(rows ?? []).map((row) => {
-        const exercise = Array.isArray(row.exercise) ? row.exercise[0] : row.exercise;
-        const history = (submissions ?? []).filter((item) => item.program_day_exercise_id === row.id);
-        const isTime = row.prescription === "time";
-        const isMixed = row.prescription === "mixed";
-
-        return (
-          <section key={row.id} className="card p-6">
-            <div className="flex gap-2 flex-wrap">
-              <span className="badge">Exercise {row.position}</span>
-              <span className="badge">{row.prescription}</span>
-              <span className="badge">{exercise?.exercise_group ?? "General"}</span>
+      {groupedRows.map((block, blockIndex) =>
+        block.kind === "superset" ? (
+          <details key={`ss-${block.label}-${blockIndex}`} className="card p-6" open={false}>
+            <summary className="cursor-pointer list-none">
+              <h2 className="text-2xl">{block.label}</h2>
+            </summary>
+            <div className="mt-3 space-y-3">
+              {block.rows.map((row) => renderExerciseCard(row, true))}
             </div>
-            <h2 className="text-3xl mt-3">{exercise?.name}</h2>
-            <div className="grid md:grid-cols-4 gap-2 mt-3 text-sm">
-              <div className="metric"><p className="meta">Sets</p><p className="font-semibold">{row.set_count ?? "-"}</p></div>
-              <div className="metric"><p className="meta">Reps</p><p className="font-semibold">{row.rep_target ?? "-"}</p></div>
-              <div className="metric"><p className="meta">Weight</p><p className="font-semibold">{row.weight_target_lbs ?? "-"}</p></div>
-              <div className="metric"><p className="meta">Time</p><p className="font-semibold">{row.time_target_seconds ?? "-"}</p></div>
-            </div>
-            <p className="text-sm mt-3"><span className="font-semibold">Focus:</span> {row.focus ?? "-"}</p>
-            <p className="text-sm mt-1"><span className="font-semibold">Purpose/Impact:</span> {exercise?.purpose_impact ?? "-"}</p>
-            <p className="text-sm mt-1"><span className="font-semibold">Where to feel:</span> {exercise?.where_to_feel ?? "-"}</p>
-            <p className="text-sm mt-1"><span className="font-semibold">Do:</span> {row.dos ?? "-"}</p>
-            <p className="text-sm mt-1"><span className="font-semibold">Don&apos;t:</span> {row.donts ?? "-"}</p>
-            <p className="text-sm mt-1"><span className="font-semibold">Personal notes:</span> {row.personal_notes ?? "-"}</p>
-
-            <form action={submitExercise} className="mt-4 border rounded-xl p-4 bg-white">
-              <input type="hidden" name="program_day_exercise_id" value={row.id} />
-              <h3 className="text-xl">Submit Video + Notes</h3>
-              <p className="text-sm meta mt-1">
-                Smart guidance only: fill the fields that match this exercise prescription.
-              </p>
-
-              <div className="grid md:grid-cols-3 gap-3 mt-3">
-                <label className="text-sm">
-                  Reps Completed {(isTime && !isMixed) ? "(usually optional)" : "(recommended)"}
-                  <input className="input mt-1" type="number" name="reps_completed" />
-                </label>
-                <label className="text-sm">
-                  Weight (lbs) {(isTime && !isMixed) ? "(usually optional)" : "(recommended)"}
-                  <input className="input mt-1" type="number" step="0.1" name="weight_lbs" />
-                </label>
-                <label className="text-sm">
-                  Time (seconds) {(isTime || isMixed) ? "(recommended)" : "(usually optional)"}
-                  <input className="input mt-1" type="number" name="time_seconds" />
-                </label>
-              </div>
-
-              <label className="text-sm block mt-3">
-                Confidence Score (1-5)
-                <select className="select mt-1" name="confidence_score" defaultValue="3">
-                  {Object.entries(confidencePhrases).map(([score, phrase]) => (
-                    <option key={score} value={score}>
-                      {score} - {phrase}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-sm block mt-3">
-                Loom Link
-                <input className="input mt-1" type="url" name="loom_url" placeholder="https://www.loom.com/share/..." />
-              </label>
-
-              <label className="text-sm block mt-3">
-                Your Note
-                <textarea className="textarea mt-1" name="athlete_note" />
-              </label>
-              <label className="text-sm block mt-3">
-                Bot Suggested Note (editable)
-                <textarea className="textarea mt-1" name="ai_note_suggestion" />
-              </label>
-              <label className="text-sm mt-2 inline-flex items-center gap-2">
-                <input type="checkbox" name="athlete_approved_note" /> Approve bot note for submission
-              </label>
-
-              <button type="submit" className="btn btn-primary mt-4">
-                Submit to Gunther Queue
-              </button>
-            </form>
-
-            <div className="mt-4">
-              <h3 className="text-xl">Past Submissions</h3>
-              {!history.length && <p className="meta mt-2">No submissions yet.</p>}
-              <div className="space-y-2 mt-2">
-                {history.map((item) => (
-                  <details key={item.id} className={`border rounded-xl p-3 status-${item.status}`} open={false}>
-                    <summary className="cursor-pointer list-none">
-                      <div className="flex flex-wrap gap-2 items-center text-sm">
-                        <span className="badge">
-                          {statusLabel[(item.status ?? "pending_review") as keyof typeof statusLabel]}
-                        </span>
-                        <span className="badge">
-                          {item.confidence_score} - {confidencePhrases[(item.confidence_score ?? 3) as 1 | 2 | 3 | 4 | 5]}
-                        </span>
-                        <span className="badge">{new Date(item.submitted_at).toLocaleDateString()}</span>
-                      </div>
-                    </summary>
-                    <div className="mt-2">
-                      <p className="text-sm">
-                        Reps: {item.reps_completed ?? "-"} | Weight: {item.weight_lbs ?? "-"} | Time: {item.time_seconds ?? "-"}
-                      </p>
-                      {!!item.loom_url && (
-                        <a href={item.loom_url} target="_blank" className="text-blue-700 underline text-sm mt-1 inline-block">
-                          Open Link
-                        </a>
-                      )}
-                      {item.feedback?.[0] && (
-                        <p className="text-sm mt-1"><span className="font-semibold">Most recent feedback:</span> {item.feedback[0].high_level_feedback}</p>
-                      )}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          </section>
-        );
-      })}
+          </details>
+        ) : (
+          block.rows.map((row) => renderExerciseCard(row))
+        )
+      )}
     </main>
   );
 }
