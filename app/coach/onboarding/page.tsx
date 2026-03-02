@@ -12,6 +12,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import CoachOnboardingFields from "@/components/coach-onboarding-fields";
+import { calculateAge } from "@/lib/format";
 
 export default async function CoachOnboardingPage() {
   const supabase = createSupabaseServer();
@@ -51,20 +52,7 @@ export default async function CoachOnboardingPage() {
     if (actionProfile?.approval_status === "pending") redirect("/pending-approval");
 
     const birthDateRaw = String(formData.get("birth_date") ?? "").trim();
-    const parsedBirthDate = birthDateRaw ? new Date(`${birthDateRaw}T00:00:00`) : null;
-    const calculatedAge =
-      parsedBirthDate && !Number.isNaN(parsedBirthDate.getTime())
-        ? Math.max(
-            0,
-            new Date().getFullYear() -
-              parsedBirthDate.getFullYear() -
-              (new Date().getMonth() < parsedBirthDate.getMonth() ||
-              (new Date().getMonth() === parsedBirthDate.getMonth() &&
-                new Date().getDate() < parsedBirthDate.getDate())
-                ? 1
-                : 0)
-          )
-        : null;
+    const calculatedAge = calculateAge(birthDateRaw);
 
     await sb
       .from("profiles")

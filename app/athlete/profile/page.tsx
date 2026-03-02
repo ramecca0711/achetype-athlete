@@ -12,7 +12,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import PosturePhotoInput from "@/components/posture-photo-input";
+import AthleteOnboardingFields from "@/components/athlete-onboarding-fields";
+import { calculateAge } from "@/lib/format";
 
 type Slot = "front" | "back" | "left" | "right";
 const slots: Slot[] = ["front", "back", "left", "right"];
@@ -65,13 +66,9 @@ export default async function AthleteProfilePage({
   const photoMap = new Map((photos ?? []).map((p) => [p.photo_slot, p.photo_url]));
   const uploadedPhotoCount = slots.filter((slot) => !!photoMap.get(slot)).length;
   const existingHeightInches = Number(profile?.height_inches ?? 0) || 0;
-  const existingWeightLbs = Number(profile?.weight_lbs ?? 0) || 0;
-  const defaultFeet = existingHeightInches > 0 ? Math.floor(existingHeightInches / 12) : "";
-  const defaultInchesPart = existingHeightInches > 0 ? Number((existingHeightInches % 12).toFixed(1)) : "";
-  const defaultHeightCm = existingHeightInches > 0 ? Number((existingHeightInches * 2.54).toFixed(1)) : "";
-  const defaultWeightKg = existingWeightLbs > 0 ? Number((existingWeightLbs / 2.2046226218).toFixed(1)) : "";
   const readHeightFeet = existingHeightInches > 0 ? Math.floor(existingHeightInches / 12) : null;
   const readHeightInchesPart = existingHeightInches > 0 ? Number((existingHeightInches % 12).toFixed(1)) : null;
+  const photoInitialUrls = Object.fromEntries(slots.map((slot) => [slot, photoMap.get(slot) ?? ""])) as Record<"front" | "back" | "left" | "right", string>;
 
   async function saveProfile(formData: FormData) {
     "use server";
@@ -104,20 +101,7 @@ export default async function AthleteProfilePage({
       url: String(formData.get(`photo_${slot}`) ?? "").trim()
     }));
     const birthDateRaw = String(formData.get("birth_date") ?? "").trim();
-    const parsedBirthDate = birthDateRaw ? new Date(`${birthDateRaw}T00:00:00`) : null;
-    const calculatedAge =
-      parsedBirthDate && !Number.isNaN(parsedBirthDate.getTime())
-        ? Math.max(
-            0,
-            new Date().getFullYear() -
-              parsedBirthDate.getFullYear() -
-              (new Date().getMonth() < parsedBirthDate.getMonth() ||
-              (new Date().getMonth() === parsedBirthDate.getMonth() &&
-                new Date().getDate() < parsedBirthDate.getDate())
-                ? 1
-                : 0)
-          )
-        : null;
+    const calculatedAge = calculateAge(birthDateRaw);
     const measurementUnit = String(formData.get("measurement_unit") ?? "imperial").trim() === "metric" ? "metric" : "imperial";
     const heightFeet = parseNumber(formData.get("height_feet"));
     const heightInchesPart = parseNumber(formData.get("height_inches_part"));
@@ -275,110 +259,15 @@ export default async function AthleteProfilePage({
 
       <section className="card p-6">
         {isEditMode ? (
-          <form action={saveProfile} className="space-y-4">
+          <form action={saveProfile} className="space-y-3">
             <input type="hidden" name="target_athlete_id" value={scopedAthleteId} readOnly />
-            <section className="border rounded-xl p-4 bg-white">
-              <h2 className="text-xl">Basic Info</h2>
-              <div className="grid md:grid-cols-2 gap-3 mt-3">
-                <label className="text-sm block">Full Name
-                  <input className="input mt-1" name="full_name" defaultValue={profile?.full_name ?? ""} required />
-                </label>
-                <label className="text-sm block">Gender
-                  <select className="select mt-1" name="gender" defaultValue={profile?.gender ?? ""}>
-                    <option value="">Select</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="non_binary">Non-binary</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
-                  </select>
-                </label>
-                <label className="text-sm block">Birthday
-                  <input className="input mt-1" type="date" name="birth_date" defaultValue={profile?.birth_date ?? ""} />
-                </label>
-                <div className="text-sm block">
-                  <p>Calculated age</p>
-                  <p className="input mt-1 bg-slate-50">{profile?.age ?? "-"}</p>
-                </div>
-                <label className="text-sm block">Units
-                  <select className="select mt-1" name="measurement_unit" defaultValue="imperial">
-                    <option value="imperial">Imperial (ft/in, lbs)</option>
-                    <option value="metric">Metric (cm, kg)</option>
-                  </select>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-sm block">Height (ft)
-                    <input className="input mt-1" type="number" min={0} step="1" name="height_feet" defaultValue={defaultFeet} />
-                  </label>
-                  <label className="text-sm block">Height (in)
-                    <input className="input mt-1" type="number" min={0} step="0.1" name="height_inches_part" defaultValue={defaultInchesPart} />
-                  </label>
-                </div>
-                <label className="text-sm block">Height (cm, for metric)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="height_cm" defaultValue={defaultHeightCm} />
-                </label>
-                <label className="text-sm block">Weight (lbs, for imperial)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="weight_lbs_input" defaultValue={profile?.weight_lbs ?? ""} />
-                </label>
-                <label className="text-sm block">Weight (kg, for metric)
-                  <input className="input mt-1" type="number" min={0} step="0.1" name="weight_kg" defaultValue={defaultWeightKg} />
-                </label>
-              </div>
-            </section>
-
-            <section className="border rounded-xl p-4 bg-white">
-              <h2 className="text-xl">Training Profile</h2>
-              <div className="grid md:grid-cols-2 gap-3 mt-3">
-                <label className="text-sm block">Training Experience
-                  <input className="input mt-1" name="training_experience" defaultValue={profile?.training_experience ?? ""} />
-                </label>
-                <label className="text-sm block">Weekly Training Days
-                  <input className="input mt-1" type="number" min={1} max={7} name="weekly_training_days" defaultValue={profile?.weekly_training_days ?? ""} />
-                </label>
-                <label className="text-sm block md:col-span-2">Goals (comma separated)
-                  <input className="input mt-1" name="goals" defaultValue={(profile?.goals ?? []).join(", ")} />
-                </label>
-                <label className="text-sm block md:col-span-2">Public Review Board Visibility
-                  <select className="select mt-1" name="share_feedback_publicly" defaultValue={profile?.share_feedback_publicly ? "public" : "private"}>
-                    <option value="private">Private (do not auto-share my requests/notifications)</option>
-                    <option value="public">Public (share my requests/notifications on Public Review Board)</option>
-                  </select>
-                </label>
-              </div>
-            </section>
-
-            <section className="border rounded-xl p-4 bg-white">
-              <h2 className="text-xl">Injuries And Notes</h2>
-              <div className="space-y-3 mt-3">
-                <label className="text-sm block">Injuries
-                  <textarea className="textarea mt-1" name="injuries" defaultValue={profile?.injuries ?? ""} />
-                </label>
-                <label className="text-sm block">Imbalances
-                  <textarea className="textarea mt-1" name="imbalances" defaultValue={profile?.imbalances ?? ""} />
-                </label>
-                <label className="text-sm block">Intro Notes
-                  <textarea className="textarea mt-1" name="intro_survey_notes" defaultValue={profile?.intro_survey_notes ?? ""} />
-                </label>
-              </div>
-            </section>
-
-            <section className="border rounded-xl p-4 bg-white">
-              <h2 className="text-xl">Posture Photos</h2>
-              <p className="meta text-sm mt-1">
-                Upload front, back, left, and right photos. This can be completed later and updated any time.
-              </p>
-              <div className="grid md:grid-cols-2 gap-3 mt-3">
-                {slots.map((slot) => (
-                  <PosturePhotoInput
-                    key={slot}
-                    athleteId={scopedAthleteId}
-                    slot={slot}
-                    initialUrl={photoMap.get(slot) ?? ""}
-                  />
-                ))}
-              </div>
-            </section>
-
-            <div className="flex justify-end">
+            <AthleteOnboardingFields
+              defaults={profile ?? undefined}
+              athleteId={scopedAthleteId}
+              photoInitialUrls={photoInitialUrls}
+              currentAge={profile?.age}
+            />
+            <div className="flex justify-end pt-2">
               <button className="btn btn-primary" type="submit">Save Profile</button>
             </div>
           </form>

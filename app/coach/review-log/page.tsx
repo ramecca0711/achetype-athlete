@@ -18,6 +18,7 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import ArchetypeApprovalForm from "@/components/archetype-approval-form";
 import { ArchetypeKind, archetypeSummary, inferArchetype, suggestArchetypeFromRatio } from "@/lib/archetype";
 import { fetchLoomTranscriptSummary } from "@/lib/loom";
+import { feedbackScoreLabel } from "@/lib/format";
 import TimestampFramePreview from "@/components/timestamp-frame-preview";
 
 export default async function CoachReviewLogPage({
@@ -39,14 +40,6 @@ export default async function CoachReviewLogPage({
   const scopedCoachId = me?.role === "admin" ? cookieStore.get("admin_view_coach_id")?.value || "" : user.id;
   if (me?.role === "admin" && !scopedCoachId) redirect("/admin");
   const statusLabel = (value: string | null | undefined) => (value === "resolved" ? "reviewed" : "pending");
-  const feedbackScoreLabel = (score: number | null | undefined) => {
-    if (score === 5) return "There";
-    if (score === 4) return "Almost there";
-    if (score === 3) return "Getting closer";
-    if (score === 2) return "Needs work";
-    if (score === 1) return "Not quite";
-    return "Not set";
-  };
 
   async function approveArchetype(formData: FormData) {
     "use server";

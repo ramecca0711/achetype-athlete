@@ -7,9 +7,11 @@ type Defaults = {
 
 type Props = {
   defaults?: Defaults;
+  /** Current saved age — shown as a read-only display field when provided. */
+  currentAge?: number | null;
 };
 
-export default function CoachOnboardingFields({ defaults = {} }: Props) {
+export default function CoachOnboardingFields({ defaults = {}, currentAge }: Props) {
   return (
     <>
       <label className="text-sm block">
@@ -32,6 +34,13 @@ export default function CoachOnboardingFields({ defaults = {} }: Props) {
         Birthday
         <input className="input mt-1" type="date" name="birth_date" defaultValue={defaults.birth_date ?? ""} />
       </label>
+
+      {currentAge !== undefined && (
+        <div className="text-sm block">
+          <p>Calculated age</p>
+          <p className="input mt-1 bg-slate-50">{currentAge ?? "-"}</p>
+        </div>
+      )}
 
       <label className="text-sm block">
         Setup Notes

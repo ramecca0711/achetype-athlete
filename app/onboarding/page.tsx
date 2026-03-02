@@ -12,6 +12,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import AthleteOnboardingFields from "@/components/athlete-onboarding-fields";
+import { calculateAge } from "@/lib/format";
 
 type Slot = "front" | "back" | "left" | "right";
 const slots: Slot[] = ["front", "back", "left", "right"];
@@ -76,20 +77,7 @@ export default async function OnboardingPage() {
       url: String(formData.get(`photo_${slot}`) ?? "").trim()
     }));
     const birthDateRaw = String(formData.get("birth_date") ?? "").trim();
-    const parsedBirthDate = birthDateRaw ? new Date(`${birthDateRaw}T00:00:00`) : null;
-    const calculatedAge =
-      parsedBirthDate && !Number.isNaN(parsedBirthDate.getTime())
-        ? Math.max(
-            0,
-            new Date().getFullYear() -
-              parsedBirthDate.getFullYear() -
-              (new Date().getMonth() < parsedBirthDate.getMonth() ||
-              (new Date().getMonth() === parsedBirthDate.getMonth() &&
-                new Date().getDate() < parsedBirthDate.getDate())
-                ? 1
-                : 0)
-          )
-        : null;
+    const calculatedAge = calculateAge(birthDateRaw);
     const measurementUnit = String(formData.get("measurement_unit") ?? "imperial").trim() === "metric" ? "metric" : "imperial";
     const heightFeet = parseNumber(formData.get("height_feet"));
     const heightInchesPart = parseNumber(formData.get("height_inches_part"));

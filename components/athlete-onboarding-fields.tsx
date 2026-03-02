@@ -22,9 +22,18 @@ type Props = {
   defaults?: Defaults;
   /** When provided, renders real PosturePhotoInput with upload. Omit for a static preview. */
   athleteId?: string;
+  /** Pre-filled photo URLs for profile edit mode. */
+  photoInitialUrls?: Partial<Record<Slot, string>>;
+  /** Current saved age — shown as a read-only display field when provided. */
+  currentAge?: number | null;
 };
 
-export default function AthleteOnboardingFields({ defaults = {}, athleteId }: Props) {
+export default function AthleteOnboardingFields({
+  defaults = {},
+  athleteId,
+  photoInitialUrls,
+  currentAge
+}: Props) {
   const existingHeightInches = Number(defaults.height_inches ?? 0) || 0;
   const existingWeightLbs = Number(defaults.weight_lbs ?? 0) || 0;
   const defaultFeet = existingHeightInches > 0 ? Math.floor(existingHeightInches / 12) : "";
@@ -64,6 +73,13 @@ export default function AthleteOnboardingFields({ defaults = {}, athleteId }: Pr
         Birthday
         <input className="input mt-1" type="date" name="birth_date" defaultValue={defaults.birth_date ?? ""} />
       </label>
+
+      {currentAge !== undefined && (
+        <div className="text-sm block">
+          <p>Calculated age</p>
+          <p className="input mt-1 bg-slate-50">{currentAge ?? "-"}</p>
+        </div>
+      )}
 
       <label className="text-sm block">
         Units
@@ -130,7 +146,12 @@ export default function AthleteOnboardingFields({ defaults = {}, athleteId }: Pr
       <div className="grid md:grid-cols-2 gap-3">
         {slots.map((slot) =>
           athleteId ? (
-            <PosturePhotoInput key={slot} athleteId={athleteId} slot={slot} />
+            <PosturePhotoInput
+              key={slot}
+              athleteId={athleteId}
+              slot={slot}
+              initialUrl={photoInitialUrls?.[slot] ?? ""}
+            />
           ) : (
             <div key={slot} className="text-sm block border rounded-xl p-3 bg-white">
               <p className="font-medium">{slot.toUpperCase()} Photo</p>
