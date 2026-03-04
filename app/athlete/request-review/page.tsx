@@ -14,9 +14,10 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import RequestReviewForm from "@/components/request-review-form";
-import TimestampFramePreview from "@/components/timestamp-frame-preview";
 import ClearTransientQuery from "@/components/clear-transient-query";
 import { confidencePhrases } from "@/lib/types";
+import RequestPhotoGrid from "@/components/request-photo-grid";
+import { buildPhotoPositionMap } from "@/lib/format";
 
 type ExerciseSamplePhotosByExercise = Record<
   string,
@@ -357,12 +358,7 @@ export default async function AthleteRequestReviewPage({
           {(requests ?? []).map((request: any) => {
             const exercise = Array.isArray(request.exercise) ? request.exercise[0] : request.exercise;
             const requestVideos = Array.isArray(request.videos) ? request.videos : [];
-            const requestPhotoByPosition = new Map<string, string>();
-            for (const v of requestVideos) {
-              if (v.position === 101) requestPhotoByPosition.set("top", v.video_url);
-              if (v.position === 102) requestPhotoByPosition.set("middle", v.video_url);
-              if (v.position === 103) requestPhotoByPosition.set("bottom", v.video_url);
-            }
+            const requestPhotoByPosition = buildPhotoPositionMap(requestVideos);
 
             // When this request is being edited, render an inline edit form card
             // instead of the normal expandable details view.
@@ -470,44 +466,19 @@ export default async function AthleteRequestReviewPage({
                     <p className="text-sm meta">Updated: {new Date(request.updated_at).toLocaleString()}</p>
                   )}
                   {request.notes && <p className="text-sm mt-1">{request.notes}</p>}
-                  <div className="space-y-2 mt-3">
-                    {([
-                      { key: "top", timestamp: request.ts_top_seconds },
-                      { key: "middle", timestamp: request.ts_middle_seconds },
-                      { key: "bottom", timestamp: request.ts_bottom_seconds }
-                    ] as const).map((item) => {
-                      const samplePhotoUrl = samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:${item.key}`);
-                      const requestPhotoUrl = requestPhotoByPosition.get(item.key);
-                      return (
-                        <div key={`${request.id}-${item.key}`} className="grid md:grid-cols-2 gap-2">
-                          {requestPhotoUrl ? (
-                            <div className="border rounded-lg p-2 bg-white">
-                              <p className="text-xs meta">Your form photo ({item.key})</p>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={requestPhotoUrl} alt={`Your form photo ${item.key}`} className="w-full h-32 object-contain rounded mt-1 bg-slate-50" />
-                              <p className="text-xs mt-1">Timestamp: {typeof item.timestamp === "number" ? `${item.timestamp.toFixed(1)}s` : "-"}</p>
-                            </div>
-                          ) : (
-                            <TimestampFramePreview
-                              videoUrl={request.submission_video_url ?? ""}
-                              timestampSeconds={item.timestamp}
-                              label={`Your form photo (${item.key})`}
-                            />
-                          )}
-                          <div className="border rounded-lg p-2 bg-white">
-                            <p className="text-xs meta">Master sample photo ({item.key})</p>
-                            {samplePhotoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={samplePhotoUrl} alt={`Master sample ${item.key}`} className="w-full h-32 object-contain rounded mt-1 bg-slate-50" />
-                            ) : (
-                              <div className="w-full h-32 rounded mt-1 bg-slate-50 flex items-center justify-center text-xs meta">
-                                No sample photo
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="mt-3">
+                    <RequestPhotoGrid
+                      requestId={request.id}
+                      submissionVideoUrl={request.submission_video_url}
+                      timestamps={{ top: request.ts_top_seconds, middle: request.ts_middle_seconds, bottom: request.ts_bottom_seconds }}
+                      athletePhotoByPosition={requestPhotoByPosition}
+                      samplePhotoByPosition={{
+                        top: samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:top`),
+                        middle: samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:middle`),
+                        bottom: samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:bottom`)
+                      }}
+                      athletePhotoLabel="Your form photo"
+                    />
                   </div>
                 </div>
               </details>

@@ -11,6 +11,8 @@
  */
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import CoachOnboardingFields from "@/components/coach-onboarding-fields";
+import { calculateAge } from "@/lib/format";
 
 export default async function CoachOnboardingPage() {
   const supabase = createSupabaseServer();
@@ -50,20 +52,7 @@ export default async function CoachOnboardingPage() {
     if (actionProfile?.approval_status === "pending") redirect("/pending-approval");
 
     const birthDateRaw = String(formData.get("birth_date") ?? "").trim();
-    const parsedBirthDate = birthDateRaw ? new Date(`${birthDateRaw}T00:00:00`) : null;
-    const calculatedAge =
-      parsedBirthDate && !Number.isNaN(parsedBirthDate.getTime())
-        ? Math.max(
-            0,
-            new Date().getFullYear() -
-              parsedBirthDate.getFullYear() -
-              (new Date().getMonth() < parsedBirthDate.getMonth() ||
-              (new Date().getMonth() === parsedBirthDate.getMonth() &&
-                new Date().getDate() < parsedBirthDate.getDate())
-                ? 1
-                : 0)
-          )
-        : null;
+    const calculatedAge = calculateAge(birthDateRaw);
 
     await sb
       .from("profiles")
@@ -90,31 +79,7 @@ export default async function CoachOnboardingPage() {
         </p>
 
         <form action={submitCoachOnboarding} className="space-y-3 mt-5">
-          <label className="text-sm block">
-            Full Name
-            <input className="input mt-1" name="full_name" defaultValue={profile?.full_name ?? ""} required />
-          </label>
-
-          <label className="text-sm block">
-            Gender
-            <select className="select mt-1" name="gender" defaultValue={profile?.gender ?? ""}>
-              <option value="">Select</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="non_binary">Non-binary</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </select>
-          </label>
-
-          <label className="text-sm block">
-            Birthday
-            <input className="input mt-1" type="date" name="birth_date" defaultValue={profile?.birth_date ?? ""} />
-          </label>
-
-          <label className="text-sm block">
-            Setup Notes
-            <textarea className="textarea mt-1" name="intro_survey_notes" defaultValue={profile?.intro_survey_notes ?? ""} />
-          </label>
+          <CoachOnboardingFields defaults={profile ?? undefined} />
 
           <div className="pt-2">
             <button className="btn btn-primary" type="submit">

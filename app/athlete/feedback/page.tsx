@@ -10,6 +10,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { feedbackScoreLabel } from "@/lib/format";
 
 export default async function AthleteFeedbackPage() {
   const supabase = createSupabaseServer();
@@ -25,14 +26,6 @@ export default async function AthleteFeedbackPage() {
 
   const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", scopedAthleteId).maybeSingle();
   if (profile?.role !== "athlete" && me?.role !== "admin") redirect("/");
-  const feedbackScoreLabel = (score: number | null | undefined) => {
-    if (score === 5) return "There";
-    if (score === 4) return "Almost there";
-    if (score === 3) return "Getting closer";
-    if (score === 2) return "Needs work";
-    if (score === 1) return "Not quite";
-    return "Not set";
-  };
 
   const { data: requests } = await supabase
     .from("review_requests")

@@ -18,7 +18,8 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import ArchetypeApprovalForm from "@/components/archetype-approval-form";
 import { ArchetypeKind, archetypeSummary, inferArchetype, suggestArchetypeFromRatio } from "@/lib/archetype";
 import { fetchLoomTranscriptSummary } from "@/lib/loom";
-import TimestampFramePreview from "@/components/timestamp-frame-preview";
+import { feedbackScoreLabel, buildPhotoPositionMap } from "@/lib/format";
+import RequestPhotoGrid from "@/components/request-photo-grid";
 
 export default async function CoachReviewLogPage({
   searchParams
@@ -39,14 +40,6 @@ export default async function CoachReviewLogPage({
   const scopedCoachId = me?.role === "admin" ? cookieStore.get("admin_view_coach_id")?.value || "" : user.id;
   if (me?.role === "admin" && !scopedCoachId) redirect("/admin");
   const statusLabel = (value: string | null | undefined) => (value === "resolved" ? "reviewed" : "pending");
-  const feedbackScoreLabel = (score: number | null | undefined) => {
-    if (score === 5) return "There";
-    if (score === 4) return "Almost there";
-    if (score === 3) return "Getting closer";
-    if (score === 2) return "Needs work";
-    if (score === 1) return "Not quite";
-    return "Not set";
-  };
 
   async function approveArchetype(formData: FormData) {
     "use server";
@@ -268,12 +261,7 @@ export default async function CoachReviewLogPage({
         const athlete = Array.isArray(request.athlete) ? request.athlete[0] : request.athlete;
         const exercise = Array.isArray(request.exercise) ? request.exercise[0] : request.exercise;
         const requestVideos = Array.isArray(request.videos) ? request.videos : [];
-        const requestPhotoByPosition = new Map<string, string>();
-        for (const v of requestVideos) {
-          if (v.position === 101) requestPhotoByPosition.set("top", v.video_url);
-          if (v.position === 102) requestPhotoByPosition.set("middle", v.video_url);
-          if (v.position === 103) requestPhotoByPosition.set("bottom", v.video_url);
-        }
+        const requestPhotoByPosition = buildPhotoPositionMap(requestVideos);
         return (
           <details key={request.id} className="card p-6" open={false}>
             <summary className="cursor-pointer list-none">
@@ -304,44 +292,18 @@ export default async function CoachReviewLogPage({
               )}
               <p className="text-sm mt-1">Timestamps: top {request.ts_top_seconds ?? "-"}, middle {request.ts_middle_seconds ?? "-"}, bottom {request.ts_bottom_seconds ?? "-"}</p>
               {request.notes && <p className="text-sm mt-1">Request notes: {request.notes}</p>}
-              <div className="mt-3 space-y-2">
-                {([
-                  { key: "top", timestamp: request.ts_top_seconds },
-                  { key: "middle", timestamp: request.ts_middle_seconds },
-                  { key: "bottom", timestamp: request.ts_bottom_seconds }
-                ] as const).map((item) => {
-                  const requestPhotoUrl = requestPhotoByPosition.get(item.key);
-                  const samplePhotoUrl = samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:${item.key}`);
-                  return (
-                    <div key={`${request.id}-${item.key}`} className="grid md:grid-cols-2 gap-2">
-                      {requestPhotoUrl ? (
-                        <div className="border rounded-lg p-2 bg-white">
-                          <p className="text-xs meta">Athlete form photo ({item.key})</p>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={requestPhotoUrl} alt={`Athlete ${item.key}`} className="w-full h-32 object-contain rounded mt-1 bg-slate-50" />
-                          <p className="text-xs mt-1">Timestamp: {typeof item.timestamp === "number" ? `${item.timestamp.toFixed(1)}s` : "-"}</p>
-                        </div>
-                      ) : (
-                        <TimestampFramePreview
-                          videoUrl={request.submission_video_url ?? ""}
-                          timestampSeconds={item.timestamp}
-                          label={`Athlete form photo (${item.key})`}
-                        />
-                      )}
-                      <div className="border rounded-lg p-2 bg-white">
-                        <p className="text-xs meta">Master sample photo ({item.key})</p>
-                        {samplePhotoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={samplePhotoUrl} alt={`Master sample ${item.key}`} className="w-full h-32 object-contain rounded mt-1 bg-slate-50" />
-                        ) : (
-                          <div className="w-full h-32 rounded mt-1 bg-slate-50 flex items-center justify-center text-xs meta">
-                            No sample photo
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="mt-3">
+                <RequestPhotoGrid
+                  requestId={request.id}
+                  submissionVideoUrl={request.submission_video_url}
+                  timestamps={{ top: request.ts_top_seconds, middle: request.ts_middle_seconds, bottom: request.ts_bottom_seconds }}
+                  athletePhotoByPosition={requestPhotoByPosition}
+                  samplePhotoByPosition={{
+                    top: samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:top`),
+                    middle: samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:middle`),
+                    bottom: samplePhotoByExerciseAndPosition.get(`${request.exercise_id}:bottom`)
+                  }}
+                />
               </div>
 
               <form action={updateRequest} className="grid md:grid-cols-2 gap-3 mt-4 border rounded-xl p-3 bg-white">

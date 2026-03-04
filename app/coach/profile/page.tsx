@@ -11,6 +11,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import CoachOnboardingFields from "@/components/coach-onboarding-fields";
+import { calculateAge } from "@/lib/format";
 
 export default async function CoachProfilePage({
   searchParams
@@ -61,20 +63,7 @@ export default async function CoachProfilePage({
     if (!targetCoachId) redirect("/admin");
 
     const birthDateRaw = String(formData.get("birth_date") ?? "").trim();
-    const parsedBirthDate = birthDateRaw ? new Date(`${birthDateRaw}T00:00:00`) : null;
-    const calculatedAge =
-      parsedBirthDate && !Number.isNaN(parsedBirthDate.getTime())
-        ? Math.max(
-            0,
-            new Date().getFullYear() -
-              parsedBirthDate.getFullYear() -
-              (new Date().getMonth() < parsedBirthDate.getMonth() ||
-              (new Date().getMonth() === parsedBirthDate.getMonth() &&
-                new Date().getDate() < parsedBirthDate.getDate())
-                ? 1
-                : 0)
-          )
-        : null;
+    const calculatedAge = calculateAge(birthDateRaw);
 
     const { error: updateError } = await sb
       .from("profiles")
@@ -131,43 +120,10 @@ export default async function CoachProfilePage({
 
       <section className="card p-6">
         {isEditMode ? (
-          <form action={saveCoachProfile} className="space-y-4">
+          <form action={saveCoachProfile} className="space-y-3">
             <input type="hidden" name="target_coach_id" value={scopedCoachId} readOnly />
-            <section className="border rounded-xl p-4 bg-white">
-              <h2 className="text-xl">Basic Info</h2>
-              <div className="grid md:grid-cols-2 gap-3 mt-3">
-                <label className="text-sm block">Full Name
-                  <input className="input mt-1" name="full_name" defaultValue={profile?.full_name ?? ""} required />
-                </label>
-                <label className="text-sm block">Gender
-                  <select className="select mt-1" name="gender" defaultValue={profile?.gender ?? ""}>
-                    <option value="">Select</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="non_binary">Non-binary</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
-                  </select>
-                </label>
-                <label className="text-sm block">Birthday
-                  <input className="input mt-1" type="date" name="birth_date" defaultValue={profile?.birth_date ?? ""} />
-                </label>
-                <div className="text-sm block">
-                  <p>Calculated age</p>
-                  <p className="input mt-1 bg-slate-50">{profile?.age ?? "-"}</p>
-                </div>
-              </div>
-            </section>
-
-            <section className="border rounded-xl p-4 bg-white">
-              <h2 className="text-xl">Coaching Profile</h2>
-              <div className="grid md:grid-cols-2 gap-3 mt-3">
-                <label className="text-sm block md:col-span-2">Setup Notes
-                  <textarea className="textarea mt-1" name="intro_survey_notes" defaultValue={profile?.intro_survey_notes ?? ""} />
-                </label>
-              </div>
-            </section>
-
-            <div className="flex justify-end">
+            <CoachOnboardingFields defaults={profile ?? undefined} currentAge={profile?.age} />
+            <div className="flex justify-end pt-2">
               <button className="btn btn-primary" type="submit">Save Profile</button>
             </div>
           </form>
