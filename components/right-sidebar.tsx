@@ -124,6 +124,7 @@ function IconMessageSquare() {
 
 const adminItems: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: <IconGrid /> },
+  { href: "/admin/survey-preview", label: "Survey Preview", icon: <IconClipboard /> },
   { href: "/analytics", label: "Analytics", icon: <IconBarChart /> }
 ];
 

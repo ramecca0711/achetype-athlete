@@ -191,10 +191,7 @@ export default async function AdminPage({
   return (
     <main className="shell space-y-4">
       <section className="card p-6">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p className="badge inline-block">Admin</p>
-          <Link href="/admin/survey-preview" className="btn btn-secondary text-sm">Survey Preview</Link>
-        </div>
+        <p className="badge inline-block">Admin</p>
         <h1 className="text-4xl mt-3">Platform Control</h1>
         <p className="meta mt-1">Manage roles, assignments, and admin view context.</p>
         {searchParams?.deleted && (
